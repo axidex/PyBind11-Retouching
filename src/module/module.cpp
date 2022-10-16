@@ -27,13 +27,34 @@
 #include <algorithm>
 #include <memory>
 
-
 namespace py = pybind11;
-
 
 // debugging libs
 //#include <chrono>
 //#include <typeinfo>
+
+class Parallel_pixel_opencv : public ParallelLoopBody
+{
+private:
+    uchar* p;
+public:
+    Parallel_pixel_opencv(uchar* ptr) : p(ptr) {}
+
+    virtual void operator()(const Range& r) const
+    {
+        for (int i = r.start; i != r.end; ++i)
+        {
+            if (p[i] >= 230)
+            {
+                p[i] = 255;
+            }
+            else
+            {
+                p[i] = 0;
+            }
+        }
+    }
+};
 
 std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
 {
@@ -236,6 +257,12 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
     cv::Mat final_mask, final_mask_not;
 
     cv::bitwise_and(maskGF, not_dogImg3C, final_mask);
+
+    cv::Size s = final_mask.size();
+    int N = s.width * s.height * 3;
+    uchar* p = final_mask.data;
+
+    cv::parallel_for_(Range(0, N), Parallel_pixel_opencv(p));
     cv::bitwise_not(final_mask, final_mask_not);
     cv::Mat final_face_not, final_face;
     cv::bitwise_and(workImg, final_mask, final_face);
@@ -259,8 +286,8 @@ cv::Mat smoothing(cv::Mat final_face, cv::Mat final_face_not, cv::Mat maskImgNot
 {
     cv::Mat tmp1, tmp2;
     cv::Mat noFace;
-    int dx = 4; // 5
-    double fc = 10; // 50
+    int dx = 5; // 5
+    double fc = 15; // 50
     JointWMF filter;
     tmp1 = filter.filter(final_face, final_face, dx, fc);
     //bilateralFilter(final_face, tmp1, dx, fc, fc);
@@ -321,10 +348,6 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
         cHH2_smoothed = getWT2Coeffs(wt_smoothed, wavecoeffs_smoothed, 2, 'D', &is2r, &is2c);
         cHH3_smoothed = getWT2Coeffs(wt_smoothed, wavecoeffs_smoothed, 3, 'D', &is3r, &is3c);
 
-        //dispWT2Coeffs(cHH1s, i1r, i1c);
-        //std::cout << is1r << " " << is1c << std::endl;
-        //std::cout << i1r << " " << i2r << " " << i3r << " " << i1c << " " << i2c << " " << i3c << " " << std::endl;
-        //std::cout << is1r << " " << is2r << " " << is3r << " " << is1c << " " << is2c << " " << is3c << " " << std::endl;
         int rows = i1r;
         int cols = i1c;
 
@@ -340,9 +363,6 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
         cv::addWeighted(cHH2_orig_mat, alfa, cHH2_smoothed_mat, beta, 0, cHH2_smoothed_mat);
         cv::addWeighted(cHH3_orig_mat, alfa, cHH3_smoothed_mat, beta, 0, cHH3_smoothed_mat);
 
-        //mid(cHH1_orig, cHH1_smoothed, is1r, is1c);
-        //mid(cHH2_orig, cHH2_smoothed, is2r, is2c);
-        //mid(cHH3_orig, cHH3_smoothed, is3r, is3c);
         cv::Mat oupMat = cv::Mat::zeros(smoothed.rows, smoothed.cols, CV_64F);
 
         double* oup = oupMat.ptr<double>(0);
@@ -350,13 +370,12 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
         idwt2(wt_smoothed, wavecoeffs_smoothed, oup);
 
         colors.push_back(oupMat);
-        //std::cout << color << std::endl;
+
         wave_free(obj_orig);
         wt2_free(wt_orig);
         free(wavecoeffs_orig);
         free(wavecoeffs_smoothed);
     }
-    //cv::Mat final_eachCh[3] = {colors[0], colors[1], colors[3]};
     cv::Mat convertedMat_blue, convertedMat_green, convertedMat_red;
     colors[0].convertTo(convertedMat_blue, CV_8U);
     colors[1].convertTo(convertedMat_green, CV_8U);
