@@ -1,8 +1,5 @@
 #include <pybind11/pybind11.h>
 #include "ndarray_converter.h"
-//#include <pybind11/numpy.h>
-
-//#include"retouching.cpp"
 
 #include <dlib/image_processing.h>
 #include <dlib/image_processing/frontal_face_detector.h>
