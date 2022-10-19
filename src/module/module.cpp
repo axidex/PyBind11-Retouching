@@ -12,7 +12,6 @@
 #include <wavelib.h>
 
 #include <tinysplinecxx.h>
-#include <iostream>
 #include <newfilter.hpp>
 
 #include <cassert>
@@ -24,8 +23,6 @@
 #include <algorithm>
 #include <memory>
 #include <functional>
-
-namespace py = pybind11;
 
 // debugging libs
 //#include <chrono>
@@ -85,7 +82,6 @@ std::vector<cv::Mat> maskGenerate(const cv::Mat& src,const string& modelDir)
     cv::Mat landmarkImg = inputImg.clone();
     // Make a copy for drawing binary mask
     cv::Mat maskImg = cv::Mat::zeros(inputImg.size(), CV_8UC1);
-
 
     auto landmarkModelPath = cv::samples::findFile(modelDir, /*required=*/false);
     if (landmarkModelPath.empty()) {
@@ -333,9 +329,6 @@ std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double
 }
 
 cv::Mat Retouching(const cv::Mat& src, const std::string& modelDir, double alfa) {
-
-    
-
     std::vector<cv::Mat> masks = maskGenerate(src, modelDir);
 
     cv::Mat orig = masks[3];
@@ -352,7 +345,6 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& modelDir, double alfa)
 }
 
 cv::Mat RetouchingImg(const std::string& imgDir, const std::string& modelDir, double alfa) {
-
     const auto inputImg =
         cv::imread(cv::samples::findFile(imgDir, /*required=*/false, /*silentMode=*/true));
     if (inputImg.empty()) {
