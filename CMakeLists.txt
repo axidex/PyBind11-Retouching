@@ -15,7 +15,7 @@ add_subdirectory(external/wavelib)
 
 
 set(FILTER_PUBLIC_INC
-    src/module/newfilter.hpp
+    src/module/newfilter.h
 )
 set(FILTER_PUBLIC_SRC
     src/module/newfilter.cpp

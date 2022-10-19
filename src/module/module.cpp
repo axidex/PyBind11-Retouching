@@ -12,7 +12,7 @@
 #include <wavelib.h>
 
 #include <tinysplinecxx.h>
-#include <newfilter.hpp>
+#include <newfilter.h>
 
 #include <cassert>
 #include <fstream>

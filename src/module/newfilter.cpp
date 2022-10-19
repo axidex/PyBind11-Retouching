@@ -33,7 +33,7 @@
 /***************************************************************/
 #include "opencv2/core/core.hpp"
 #include <time.h>
-#include "newfilter.hpp"
+#include "newfilter.h"
 
 // Use the namespace of CV and STD
 using namespace std;
