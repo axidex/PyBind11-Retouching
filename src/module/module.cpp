@@ -23,6 +23,7 @@
 #include <cmath>
 #include <algorithm>
 #include <memory>
+#include <functional>
 
 namespace py = pybind11;
 
@@ -30,30 +31,54 @@ namespace py = pybind11;
 //#include <chrono>
 //#include <typeinfo>
 
-class Parallel_pixel_opencv : public ParallelLoopBody
+tinyspline::BSpline getCurve(int n, int nend, std::vector<tinyspline::real>& knots, const dlib::full_object_detection& shape)
 {
-private:
-    uchar* p;
-public:
-    Parallel_pixel_opencv(uchar* ptr) : p(ptr) {}
+    knots.clear();
 
-    virtual void operator()(const Range& r) const
-    {
-        for (int i = r.start; i != r.end; ++i)
-        {
-            if (p[i] >= 230)
-            {
-                p[i] = 255;
-            }
-            else
-            {
-                p[i] = 0;
-            }
-        }
+    for (int i = n; i <= nend; ++i) {
+        const auto& point = shape.part(i);
+        knots.push_back(point.x());
+        knots.push_back(point.y());
     }
-};
 
-std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
+    // Make a closed curve
+    knots.push_back(knots[0]);
+    knots.push_back(knots[1]);
+    // Interpolate the curve
+    auto spline = tinyspline::BSpline::interpolateCubicNatural(knots, 2);
+
+    return spline;
+}
+
+void drawLandmark(double x, double y, cv::Mat& landmarkImg)
+{
+    constexpr auto radius = 5;
+    const auto color = cv::Scalar(0, 255, 255);
+    constexpr auto thickness = 2;
+    const auto center = cv::Point(x, y);
+    cv::circle(landmarkImg, center, radius, color, thickness);
+}
+
+void face_part( cv::Mat& maskImg, const dlib::shape_predictor landmarkDetector, const dlib::full_object_detection shape, int entry, int end, cv::Mat& landmarkImg)
+{
+    std::vector<tinyspline::real> knots;
+
+    // Right eye cubic curve
+    const auto Curve = getCurve(entry, end, knots, shape);
+    // Sample landmark points from the curve
+    std::array<cv::Point, size_t(25)> Pts;
+    for (int i = 0; i < 25; ++i) {
+        const auto net = Curve(1.0 / 25 * i);
+        const auto result = net.result();
+        const auto x = result[0], y = result[1];
+        drawLandmark(x, y, landmarkImg);
+        Pts[i] = cv::Point(x, y);
+    }
+    // Draw binary mask
+    cv::fillConvexPoly(maskImg, Pts, cv::Scalar(255), cv::LINE_AA);
+}
+
+std::vector<cv::Mat> maskGenerate(const cv::Mat& src,const string& modelDir)
 {
     const auto inputImg = src;
     // Make a copy for drawing landmarks
@@ -82,13 +107,6 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
     auto faces = faceDetector(dlibImg);
 
     // Draw landmark on the input image
-    const auto drawLandmark = [&](const auto x, const auto y) {
-        constexpr auto radius = 5;
-        const auto color = cv::Scalar(0, 255, 255);
-        constexpr auto thickness = 2;
-        const auto center = cv::Point(x, y);
-        cv::circle(landmarkImg, center, radius, color, thickness);
-    };
 
     // clang-format off
     // Get outer contour of facial features
@@ -105,60 +123,12 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
     for (const auto& face : faces) {
         std::vector<tinyspline::real> knots;
         const auto shape = landmarkDetector(dlibImg, face);
-        // Join the landmark points on the boundary of facial features using cubic curve
 
-        const auto getCurve = [&](int n, int nend) {
-            knots.clear();
+        face_part(maskImg, landmarkDetector, shape, 36, 41, landmarkImg); // right eye
+        face_part(maskImg, landmarkDetector, shape, 42, 47, landmarkImg); // left eye
+        //face_part(maskImg, landmarkDetector, shape, 48, 59, landmarkImg);
 
-            for (int i = n; i <= nend; ++i) {
-                const auto& point = shape.part(i);
-                knots.push_back(point.x());
-                knots.push_back(point.y());
-            }
-
-            // Make a closed curve
-            knots.push_back(knots[0]);
-            knots.push_back(knots[1]);
-            // Interpolate the curve
-            auto spline = tinyspline::BSpline::interpolateCubicNatural(knots, 2);
-
-            return spline;
-        };
-
-        // Right eye cubic curve
-        constexpr auto nEyeCurve = 6;
-        const auto rightEyeCurve = getCurve(36, 41);
-
-        // Sample landmark points from the curve
-        constexpr auto eyePointNum = 25;
-        std::array<cv::Point, eyePointNum> rightEyePts;
-        for (int i = 0; i < eyePointNum; ++i) {
-            const auto net = rightEyeCurve(1.0 / eyePointNum * i);
-            const auto result = net.result();
-            const auto x = result[0], y = result[1];
-            drawLandmark(x, y);
-            rightEyePts[i] = cv::Point(x, y);
-        }
-        // Draw binary mask
-        cv::fillConvexPoly(maskImg, rightEyePts, cv::Scalar(255), cv::LINE_AA);
-
-        // Left eye cubic curve
-        const auto leftEyeCurve = getCurve(42, 47);
-        std::array<cv::Point, eyePointNum> leftEyePts;
-        // Sample landmark points from the curve
-        for (int i = 0; i < eyePointNum; ++i) {
-            const auto net = leftEyeCurve(1.0 / eyePointNum * i);
-            const auto result = net.result();
-            const auto x = result[0], y = result[1];
-            drawLandmark(x, y);
-            leftEyePts[i] = cv::Point(x, y);
-        }
-        // Draw binary mask
-        cv::fillConvexPoly(maskImg, leftEyePts, cv::Scalar(255), cv::LINE_AA);
-
-        // Mouth cubic curve
-        constexpr auto nMouthCurve = 12;
-        const auto mouthCurve = getCurve(48, 59);
+        const auto mouthCurve = getCurve(48, 59, knots, shape);
         constexpr auto mouthPointNum = 40;
         std::array<cv::Point, mouthPointNum> mouthPts;
         // Sample landmark points from the curve
@@ -166,19 +136,18 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
             const auto net = mouthCurve(1.0 / mouthPointNum * i);
             const auto result = net.result();
             const auto x = result[0], y = result[1];
-            drawLandmark(x, y);
+            drawLandmark(x, y, landmarkImg);
             mouthPts[i] = cv::Point(x, y);
         }
         // Draw binary mask
         cv::fillPoly(maskImg, mouthPts, cv::Scalar(255), cv::LINE_AA);
-
         // Estimate an ellipse that can complete the upper face region
         constexpr auto nJaw = 17;
         std::vector<cv::Point> lowerFacePts;
         for (int i = 0; i < nJaw; ++i) {
             const auto& point = shape.part(i);
             const auto x = point.x(), y = point.y();
-            drawLandmark(x, y);
+            drawLandmark(x, y, landmarkImg);
             lowerFacePts.push_back(cv::Point(x, y));
         }
         // Guess a point located in the upper face region
@@ -188,7 +157,7 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
         const auto& Pt = shape.part(27);
         const auto x = Pb.x();
         const auto y = Pt.y() - 0.85 * abs(Pb.y() - Pt.y());
-        drawLandmark(x, y);
+        drawLandmark(x, y, landmarkImg);
         lowerFacePts.push_back(cv::Point(x, y));
         // Fit ellipse
         const auto box = cv::fitEllipseDirect(lowerFacePts);
@@ -212,10 +181,6 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
     cv::bitwise_not(maskGF, maskImgNot);
 
     cv::bitwise_and(inputImg, maskGF, spotImg);
-    cv::Mat t;
-
-
-    cv::Mat tmp1, tmp2;
 
     // Inner mask
     cv::Mat maskEx;
@@ -254,12 +219,9 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
     cv::Mat final_mask, final_mask_not;
 
     cv::bitwise_and(maskGF, not_dogImg3C, final_mask);
+    
+    cv::threshold(final_mask, final_mask, 230, 255, cv::THRESH_BINARY);
 
-    cv::Size s = final_mask.size();
-    int N = s.width * s.height * 3;
-    uchar* p = final_mask.data;
-
-    cv::parallel_for_(Range(0, N), Parallel_pixel_opencv(p));
     cv::bitwise_not(final_mask, final_mask_not);
     cv::Mat final_face_not, final_face;
     cv::bitwise_and(workImg, final_mask, final_face);
@@ -267,7 +229,7 @@ std::vector<cv::Mat> maskGenerate(cv::Mat src, std::string modelDir)
 
     return std::vector({ final_face, final_face_not, maskImgNot, inputImg });
 }
-std::vector<cv::Mat> maskGenerate(std::string imgDir, std::string modelDir)
+std::vector<cv::Mat> maskGenerate(const std::string& imgDir, const std::string& modelDir)
 {
     const auto inputImg =
         cv::imread(cv::samples::findFile(imgDir, /*required=*/false, /*silentMode=*/true));
@@ -279,7 +241,7 @@ std::vector<cv::Mat> maskGenerate(std::string imgDir, std::string modelDir)
     return maskGenerate(inputImg, modelDir);
 }
 
-cv::Mat smoothing(cv::Mat final_face, cv::Mat final_face_not, cv::Mat maskImgNot, cv::Mat inputImg)
+cv::Mat smoothing(cv::Mat& final_face, const cv::Mat& final_face_not,const cv::Mat& maskImgNot,const cv::Mat& inputImg)
 {
     cv::Mat tmp1, tmp2;
     cv::Mat noFace;
@@ -297,15 +259,23 @@ cv::Mat smoothing(cv::Mat final_face, cv::Mat final_face_not, cv::Mat maskImgNot
     //bilateralFilter(tmp2, dst, 5, 20, 20);
     return tmp2.clone();
 }
-cv::Mat smoothing(std::vector<cv::Mat> masks)
+cv::Mat smoothing(std::vector<cv::Mat>& masks)
 {
     return smoothing(masks[0], masks[1], masks[2], masks[3]);
 }
 
-std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
+struct WaveDeleter {
+    void operator()(wave_set* b) { wave_free(b); }
+};
+
+template<typename T>
+using deleted_unique_ptr = std::unique_ptr<T, std::function<void(T*)>>;
+
+std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double alfa)
 {
     cv::Mat bgrchannel_smoothed[3], bgrchannel_orig[3];
-
+    assert(!alfa <= 1 || !alfa >= 0);
+    double beta = 1 - alfa;
     cv::split(smoothed.clone(), bgrchannel_smoothed);
     cv::split(orig.clone(), bgrchannel_orig);
     int J = 3;
@@ -318,43 +288,30 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
         bgrchannel_orig[color].convertTo(double_orig, CV_64F);
         double* color_smoothed = double_smoothed.ptr<double>(0);
         double* color_orig = double_orig.ptr<double>(0);
-        wave_object obj_smoothed, obj_orig;
-        wt2_object wt_smoothed, wt_orig;
-
-        double* wavecoeffs_smoothed, * wavecoeffs_orig;
-        double* cHH1_smoothed, * cHH2_smoothed, * cHH3_smoothed, * cHH1_orig, * cHH2_orig, * cHH3_orig;
-        int i1r, i1c, i2r, i2c, i3r, i3c;
-        int is1r, is1c, is2r, is2c, is3r, is3c;
 
         const char* name = "db2";
+        deleted_unique_ptr<wave_set> obj_smoothed(wave_init(name), [](wave_set* f) { wave_free(f); });
+        deleted_unique_ptr<wave_set> obj_orig(wave_init(name), [](wave_set* f) { wave_free(f); });
 
-        obj_smoothed = wave_init(name);
-        obj_orig = wave_init(name);
+        deleted_unique_ptr<wt2_set> wt_smoothed(wt2_init(obj_smoothed.get(), "dwt", smoothed.rows, smoothed.cols, J), [](wt2_set* f) { wt2_free(f); });
+        deleted_unique_ptr<wt2_set> wt_orig(wt2_init(obj_orig.get(), "dwt", orig.rows, orig.cols, J), [](wt2_set* f) { wt2_free(f); });
 
-        wt_orig = wt2_init(obj_orig, "dwt", orig.rows, orig.cols, J);
-        wt_smoothed = wt2_init(obj_smoothed, "dwt", smoothed.rows, smoothed.cols, J);
+        constexpr size_t kTotalParts = 3;
+            struct {
+            int row;
+            int columns;
+        } parts_smoothed[kTotalParts], parts_original[kTotalParts];
 
-        wavecoeffs_orig = dwt2(wt_orig, color_orig);
-        wavecoeffs_smoothed = dwt2(wt_smoothed, color_smoothed);
+        deleted_unique_ptr<double> wavecoeffs_orig( dwt2(wt_orig.get(), color_orig), [](double* f) { free(f); });
+        deleted_unique_ptr<double> wavecoeffs_smoothed( dwt2(wt_smoothed.get(), color_smoothed), [](double* f) { free(f); });
 
-        cHH1_orig = getWT2Coeffs(wt_orig, wavecoeffs_orig, 1, 'D', &i1r, &i1c);
-        cHH2_orig = getWT2Coeffs(wt_orig, wavecoeffs_orig, 2, 'D', &i2r, &i2c);
-        cHH3_orig = getWT2Coeffs(wt_orig, wavecoeffs_orig, 3, 'D', &i3r, &i3c);
+        cv::Mat cHH1_orig_mat(parts_original[0].row, parts_original[0].columns, CV_64F, getWT2Coeffs(wt_orig.get(), wavecoeffs_orig.get(), 1, 'D', &parts_original[0].row, &parts_original[0].columns));
+        cv::Mat cHH2_orig_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_orig.get(), wavecoeffs_orig.get(), 2, 'D', &parts_original[1].row, &parts_original[1].columns));
+        cv::Mat cHH3_orig_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_orig.get(), wavecoeffs_orig.get(), 3, 'D', &parts_original[2].row, &parts_original[2].columns));
 
-        cHH1_smoothed = getWT2Coeffs(wt_smoothed, wavecoeffs_smoothed, 1, 'D', &is1r, &is1c);
-        cHH2_smoothed = getWT2Coeffs(wt_smoothed, wavecoeffs_smoothed, 2, 'D', &is2r, &is2c);
-        cHH3_smoothed = getWT2Coeffs(wt_smoothed, wavecoeffs_smoothed, 3, 'D', &is3r, &is3c);
-
-        int rows = i1r;
-        int cols = i1c;
-
-        cv::Mat cHH1_orig_mat(i1r, i1c, CV_64F, cHH1_orig);
-        cv::Mat cHH2_orig_mat(i2r, i2c, CV_64F, cHH2_orig);
-        cv::Mat cHH3_orig_mat(i3r, i3c, CV_64F, cHH3_orig);
-
-        cv::Mat cHH1_smoothed_mat(i1r, i1c, CV_64F, cHH1_smoothed);
-        cv::Mat cHH2_smoothed_mat(i2r, i2c, CV_64F, cHH2_smoothed);
-        cv::Mat cHH3_smoothed_mat(i3r, i3c, CV_64F, cHH3_smoothed);
+        cv::Mat cHH1_smoothed_mat(parts_original[0].row, parts_original[0].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 1, 'D', &parts_original[0].columns, &parts_original[0].columns));
+        cv::Mat cHH2_smoothed_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 2, 'D', &parts_original[1].columns, &parts_original[1].columns));
+        cv::Mat cHH3_smoothed_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 3, 'D', &parts_original[2].columns, &parts_original[2].columns));
 
         cv::addWeighted(cHH1_orig_mat, alfa, cHH1_smoothed_mat, beta, 0, cHH1_smoothed_mat);
         cv::addWeighted(cHH2_orig_mat, alfa, cHH2_smoothed_mat, beta, 0, cHH2_smoothed_mat);
@@ -364,14 +321,9 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
 
         double* oup = oupMat.ptr<double>(0);
 
-        idwt2(wt_smoothed, wavecoeffs_smoothed, oup);
+        idwt2(wt_smoothed.get(), wavecoeffs_smoothed.get(), oup);
 
         colors.push_back(oupMat);
-
-        wave_free(obj_orig);
-        wt2_free(wt_orig);
-        free(wavecoeffs_orig);
-        free(wavecoeffs_smoothed);
     }
     cv::Mat convertedMat_blue, convertedMat_green, convertedMat_red;
     colors[0].convertTo(convertedMat_blue, CV_8U);
@@ -381,9 +333,9 @@ std::vector<cv::Mat> restore(cv::Mat orig, cv::Mat smoothed, int alfa, int beta)
     return std::vector({ convertedMat_blue, convertedMat_green, convertedMat_red });
 }
 
-cv::Mat Retouching(cv::Mat src) {
+cv::Mat Retouching(const cv::Mat& src, const std::string& modelDir, double alfa) {
 
-    std::string modelDir = "shape_predictor_68_face_landmarks.dat";
+    
 
     std::vector<cv::Mat> masks = maskGenerate(src, modelDir);
 
@@ -391,11 +343,7 @@ cv::Mat Retouching(cv::Mat src) {
 
     cv::Mat smoothed = smoothing(masks);
 
-    double alfa, beta;
-    alfa = 0.9;
-    beta = 1 - alfa;
-
-    std::vector<cv::Mat> colors = restore(orig, smoothed, alfa, beta);
+    std::vector<cv::Mat> colors = restore(orig, smoothed, alfa);
 
     cv::Mat final_eachCh[3] = { colors[0], colors[1], colors[2] };
     cv::Mat final_colors;
@@ -404,9 +352,7 @@ cv::Mat Retouching(cv::Mat src) {
     return final_colors;
 }
 
-cv::Mat RetouchingImg(std::string imgDir) {
-
-    std::string modelDir = "shape_predictor_68_face_landmarks.dat";
+cv::Mat RetouchingImg(const std::string& imgDir, const std::string& modelDir, double alfa) {
 
     const auto inputImg =
         cv::imread(cv::samples::findFile(imgDir, /*required=*/false, /*silentMode=*/true));
@@ -415,7 +361,7 @@ cv::Mat RetouchingImg(std::string imgDir) {
             << "The image should be located in `images_dir`.\n";
         assert(false);
     }
-    return Retouching(inputImg);
+    return Retouching(inputImg, modelDir,alfa);
 }
 
 void Show(cv::Mat mat)
@@ -433,7 +379,9 @@ PYBIND11_MODULE(smoothingmodule, module)
 
 	module.doc() = "smoothingmodule";
 
-	module.def("Retouching", &Retouching, "A function that return the matrix of Retouched image", py::arg("src"));
-    module.def("RetouchingImg", &RetouchingImg, "A function that return the matrix of Retouched image", py::arg("imgDir"));
+	module.def("Retouching", &Retouching, "Retouching function\n\nArguments:\n\tsrc : array like\n\tinput image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput :array like\n\toutput image"
+        , py::arg("src"), py::arg("modelDir"), py::arg("alfa"));
+    module.def("RetouchingImg", &RetouchingImg, "Retouching function\n\nArguments:\n\imgDir : string\n\tpath to input image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput : array like\n\toutput image"
+        , py::arg("imgDir"), py::arg("modelDir"), py::arg("alfa"));
     module.def("Show", &Show, "imshow", py::arg("mat"));
 }
