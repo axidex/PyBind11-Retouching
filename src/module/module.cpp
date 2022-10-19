@@ -13,7 +13,7 @@
 
 #include <tinysplinecxx.h>
 #include <iostream>
-#include <newfilter.cpp>
+#include <newfilter.hpp>
 
 #include <cassert>
 #include <fstream>
@@ -176,7 +176,6 @@ std::vector<cv::Mat> maskGenerate(const cv::Mat& src,const string& modelDir)
 
     cv::bitwise_and(inputImg, maskImg3C, spotImgT);
 
-    cv::imwrite("maskImg3C.jpg", maskImg3C);
     cv::ximgproc::guidedFilter(spotImgT, maskImg3C, maskGF, 10, 200); //10 200
     cv::bitwise_not(maskGF, maskImgNot);
 
@@ -381,7 +380,7 @@ PYBIND11_MODULE(smoothingmodule, module)
 
 	module.def("Retouching", &Retouching, "Retouching function\n\nArguments:\n\tsrc : array like\n\tinput image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput :array like\n\toutput image"
         , py::arg("src"), py::arg("modelDir"), py::arg("alfa"));
-    module.def("RetouchingImg", &RetouchingImg, "Retouching function\n\nArguments:\n\imgDir : string\n\tpath to input image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput : array like\n\toutput image"
+    module.def("RetouchingImg", &RetouchingImg, "Retouching function\n\nArguments:\n\timgDir : string\n\tpath to input image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput : array like\n\toutput image"
         , py::arg("imgDir"), py::arg("modelDir"), py::arg("alfa"));
     module.def("Show", &Show, "imshow", py::arg("mat"));
 }

@@ -14,15 +14,20 @@ add_subdirectory(external/tinyspline)
 add_subdirectory(external/wavelib)
 
 
+set(FILTER_PUBLIC_INC
+    src/module/newfilter.hpp
+)
 set(FILTER_PUBLIC_SRC
     src/module/newfilter.cpp
 )
+
 set(CONVERTER_PUBLIC_SRC
     src/module/ndarray_converter.cpp
 )
 
 
 add_library(Filter STATIC ${FILTER_PUBLIC_SRC})
+target_include_directories(Filter PRIVATE src/module/)
 target_link_libraries(Filter PRIVATE ${OpenCV_LIBS})
 set_target_properties(Filter PROPERTIES LINKER_LANGUAGE CXX)
 
