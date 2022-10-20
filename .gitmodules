@@ -1,12 +1,12 @@
-#[submodule "external/pybind11"]
-#	path = external/pybind11
-#	url = https://github.com/pybind/pybind11.git
-#[submodule "external/dlib"]
-#	path = external/dlib
-#	url = https://github.com/davisking/dlib.git
-#[submodule "external/tinyspline"]
-#	path = external/tinyspline
-#	url = https://github.com/msteinbeck/tinyspline.git	
 [submodule "external/wavelib"]
 	path = external/wavelib
 	url = https://github.com/axidex/wavelib
+[submodule "external/tinyspline"]
+	path = external/tinyspline
+	url = https://github.com/msteinbeck/tinyspline
+[submodule "external/pybind11"]
+	path = external/pybind11
+	url = https://github.com/pybind/pybind11
+[submodule "external/dlib"]
+	path = external/dlib
+	url = https://github.com/davisking/dlib
