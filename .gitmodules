@@ -7,6 +7,6 @@
 #[submodule "external/tinyspline"]
 #	path = external/tinyspline
 #	url = https://github.com/msteinbeck/tinyspline.git	
-#[submodule "external/wavelib"]
-#	path = external/wavelib
-#	url = https://github.com/rafat/wavelib.git
+[submodule "external/wavelib"]
+	path = external/wavelib
+	url = https://github.com/axidex/wavelib.git
