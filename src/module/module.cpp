@@ -266,7 +266,7 @@ struct WaveDeleter {
 template<typename T>
 using deleted_unique_ptr = std::unique_ptr<T, std::function<void(T*)>>;
 
-std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double alfa)
+std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, double alfa)
 {
     cv::Mat bgr_channels_smoothed[3], bgr_channels_orig[3];
     assert(!alfa <= 1 || !alfa >= 0);
