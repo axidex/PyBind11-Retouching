@@ -314,9 +314,9 @@ std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double
 
         cv::Mat output_matrix = cv::Mat::zeros(smoothed.rows, smoothed.cols, CV_64F);
 
-        double* oup = output_matrix.ptr<double>(0);
+        double* output = output_matrix.ptr<double>(0);
 
-        idwt2(wt_smoothed.get(), wavecoeffs_smoothed.get(), oup);
+        idwt2(wt_smoothed.get(), wavecoeffs_smoothed.get(), output);
 
         colors.push_back(output_matrix);
     }
