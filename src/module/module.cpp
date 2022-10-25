@@ -304,9 +304,9 @@ std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double
         cv::Mat coefficients_HH2_original_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), 2, 'D', &parts_original[1].row, &parts_original[1].columns));
         cv::Mat coefficients_HH3_original_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), 3, 'D', &parts_original[2].row, &parts_original[2].columns));
 
-        cv::Mat coefficients_HH1_smoothed_mat(parts_original[0].row, parts_original[0].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 1, 'D', &parts_original[0].columns, &parts_original[0].columns));
-        cv::Mat coefficients_HH2_smoothed_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 2, 'D', &parts_original[1].columns, &parts_original[1].columns));
-        cv::Mat coefficients_HH3_smoothed_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 3, 'D', &parts_original[2].columns, &parts_original[2].columns));
+        cv::Mat coefficients_HH1_smoothed_mat(parts_smoothed[0].row, parts_smoothed[0].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 1, 'D', &parts_original[0].columns, &parts_original[0].columns));
+        cv::Mat coefficients_HH2_smoothed_mat(parts_smoothed[1].row, parts_smoothed[1].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 2, 'D', &parts_original[1].columns, &parts_original[1].columns));
+        cv::Mat coefficients_HH3_smoothed_mat(parts_smoothed[2].row, parts_smoothed[2].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 3, 'D', &parts_original[2].columns, &parts_original[2].columns));
 
         cv::addWeighted(coefficients_HH1_original_mat, alfa, coefficients_HH1_smoothed_mat, beta, 0, coefficients_HH1_smoothed_mat);
         cv::addWeighted(coefficients_HH2_original_mat, alfa, coefficients_HH2_smoothed_mat, beta, 0, coefficients_HH2_smoothed_mat);
@@ -320,12 +320,12 @@ std::vector<cv::Mat> restore(const cv::Mat& orig,const cv::Mat& smoothed, double
 
         colors.push_back(output_matrix);
     }
-    cv::Mat convertedMat_blue, convertedMat_green, convertedMat_red;
-    colors[0].convertTo(convertedMat_blue, CV_8U);
-    colors[1].convertTo(convertedMat_green, CV_8U);
-    colors[2].convertTo(convertedMat_red, CV_8U);
+    cv::Mat converted_matrix_blue, converted_matrix_green, converted_matrix_red;
+    colors[0].convertTo(converted_matrix_blue, CV_8U);
+    colors[1].convertTo(converted_matrix_green, CV_8U);
+    colors[2].convertTo(converted_matrix_red, CV_8U);
 
-    return std::vector({ convertedMat_blue, convertedMat_green, convertedMat_red });
+    return std::vector({ converted_matrix_blue, converted_matrix_green, converted_matrix_red });
 }
 
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir, double alfa) {
