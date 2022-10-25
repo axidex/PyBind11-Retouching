@@ -224,6 +224,7 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
 
     return std::vector({ final_face, final_face_not, mask_img_not, input_img });
 }
+
 std::vector<cv::Mat> MaskGenerate(const std::string& image_dir, const std::string& model_dir)
 {
     const auto input_img =
@@ -254,6 +255,7 @@ cv::Mat Smoothing(cv::Mat& final_face, const cv::Mat& final_face_not,const cv::M
     //bilateralFilter(tmp2, dst, 5, 20, 20);
     return tmp2.clone();
 }
+
 cv::Mat Smoothing(std::vector<cv::Mat>& masks)
 {
     return Smoothing(masks[0], masks[1], masks[2], masks[3]);
