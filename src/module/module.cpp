@@ -259,10 +259,6 @@ cv::Mat Smoothing(std::vector<cv::Mat>& masks)
     return Smoothing(masks[0], masks[1], masks[2], masks[3]);
 }
 
-struct WaveDeleter {
-    void operator()(wave_set* b) { wave_free(b); }
-};
-
 template<typename T>
 using deleted_unique_ptr = std::unique_ptr<T, std::function<void(T*)>>;
 
