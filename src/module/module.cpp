@@ -14,7 +14,6 @@
 #include <tinysplinecxx.h>
 #include <newfilter.h>
 
-#include <cassert>
 #include <fstream>
 #include <vector>
 #include <string>
@@ -28,19 +27,20 @@
 //#include <chrono>
 //#include <typeinfo>
 
-tinyspline::BSpline GetCurve(int n, int nend, std::vector<tinyspline::real>& knots, const dlib::full_object_detection& shape)
+tinyspline::BSpline GetCurve(int n, int nend, const dlib::full_object_detection& shape)
 {
+    std::vector<tinyspline::real> knots;
     knots.clear();
 
-    for (int i = n; i <= nend; ++i) {
+    for (int i = n; i < nend+1; ++i) {
         const auto& point = shape.part(i);
         knots.push_back(point.x());
         knots.push_back(point.y());
     }
 
     // Make a closed curve
-    knots.push_back(knots[0]);
-    knots.push_back(knots[1]);
+    knots.emplace_back(knots[0]);
+    knots.emplace_back(knots[1]);
     // Interpolate the curve
     auto spline = tinyspline::BSpline::interpolateCubicNatural(knots, 2);
 
@@ -61,7 +61,7 @@ void FacePart( cv::Mat& mask_image, const dlib::shape_predictor landmark_detecto
     std::vector<tinyspline::real> knots;
 
     // Right eye cubic curve
-    const auto Curve = GetCurve(entry, end, knots, shape);
+    const auto Curve = GetCurve(entry, end, shape);
     // Sample landmark points from the curve
     std::array<cv::Point, size_t(25)> Pts;
     for (int i = 0; i < 25; ++i) {
@@ -87,7 +87,7 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
     if (landmark_model_path.empty()) {
         std::cout << "Could not find the landmark model file: " << model_dir << "\n"
             << "The model should be located in `models_dir`.\n";
-        assert(false);
+        throw std::invalid_argument("Landmark model path is empty");
     }
 
     // Leave the original input image untouched
@@ -124,7 +124,7 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
         FacePart(mask_image, landmark_detector, shape, 42, 47, landmark_image); // left eye
         //FacePart(mask_image, landmark_detector, shape, 48, 59, landmark_image);
 
-        const auto mouth_curve = GetCurve(48, 59, knots, shape);
+        const auto mouth_curve = GetCurve(48, 59, shape);
         constexpr auto mouth_point_number = 40;
         std::array<cv::Point, mouth_point_number> mouth_points;
         // Sample landmark points from the curve
@@ -195,7 +195,7 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
     // Convert the RGB image to a single channel gray image
     cv::Mat gray_image;
     cv::cvtColor(work_image, gray_image, cv::COLOR_BGR2GRAY);
-
+        
     // Compute the DoG to detect edges
     cv::Mat blur_image_1, blur_image_2, DoG_image;
     const auto sigmaY = gray_image.cols / 200.0;
@@ -214,15 +214,16 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
     cv::Mat final_mask, final_mask_not;
 
     cv::bitwise_and(mask_GF, not_DoG_image_3_channels, final_mask);
-    
+
+    cv::Mat probability_mask = final_mask.clone();
     cv::threshold(final_mask, final_mask, 230, 255, cv::THRESH_BINARY);
 
     cv::bitwise_not(final_mask, final_mask_not);
     cv::Mat final_face_not, final_face;
     cv::bitwise_and(work_image, final_mask, final_face);
     cv::bitwise_and(work_image, final_mask_not, final_face_not);
-
-    return std::vector({ final_face, final_face_not, mask_img_not, input_img });
+    cv::imwrite("probability_mask.jpg", probability_mask);
+    return std::vector({ final_face, final_face_not, mask_img_not, input_img, probability_mask });
 }
 
 std::vector<cv::Mat> MaskGenerate(const std::string& image_dir, const std::string& model_dir)
@@ -232,7 +233,7 @@ std::vector<cv::Mat> MaskGenerate(const std::string& image_dir, const std::strin
     if (input_img.empty()) {
         std::cout << "Could not open or find the image: " << image_dir << "\n"
             << "The image should be located in `images_dir`.\n";
-        assert(false);
+        throw std::invalid_argument("Input image path is empty");
     }
     return MaskGenerate(input_img, model_dir);
 }
@@ -253,7 +254,7 @@ cv::Mat Smoothing(cv::Mat& final_face, const cv::Mat& final_face_not,const cv::M
 
     //dst = filter.filter(tmp2, tmp2, 2, 10);
     //bilateralFilter(tmp2, dst, 5, 20, 20);
-    return tmp2.clone();
+    return tmp2;
 }
 
 cv::Mat Smoothing(std::vector<cv::Mat>& masks)
@@ -261,14 +262,75 @@ cv::Mat Smoothing(std::vector<cv::Mat>& masks)
     return Smoothing(masks[0], masks[1], masks[2], masks[3]);
 }
 
-template<typename T>
-using deleted_unique_ptr = std::unique_ptr<T, std::function<void(T*)>>;
+struct Deleter {
+    void operator() (wave_set* f)
+    {
+        wave_free(f);
+    }
 
-std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, double alfa)
+    void operator() (wt2_set* f)
+    {
+        wt2_free(f);
+    }
+
+    void operator() (double* f)
+    {
+        free(f);
+    }
+};
+
+std::vector<double> CalculateTI(const cv::Mat& probability_mask, const cv::Mat& original, const cv::Mat& smoothed)
+{
+    std::vector<double> TIs; // bgr
+    double gamma = 0.5;
+    double beta = 1;
+    cv::Mat probability_mask_resized, smoothed_resized;
+
+    cv::Mat bgr_channels_smoothed[3], bgr_channels_orig[3];
+    
+    cv::split(original.clone(), bgr_channels_orig);
+    
+    for (int color = 0; color < 3; ++color)
+    {
+        cv::Mat original_color, smoothed_color;
+        original_color = bgr_channels_orig[color];
+        int width = original_color.rows;
+        int height = original_color.cols;
+        resize(smoothed, smoothed_resized, Size(height, width), 0, 0, INTER_CUBIC);
+        cv::split(smoothed_resized.clone(), bgr_channels_smoothed);
+        smoothed_color = bgr_channels_smoothed[color];
+
+        resize(probability_mask, probability_mask_resized, Size(height, width), 0, 0, INTER_CUBIC);
+
+        double TI = 0;
+
+        uchar* original_color_ptr = original_color.data;
+        uchar* smoothed_color_ptr = smoothed_color.data;
+        uchar* probability_mask_resized_ptr = probability_mask_resized.data;
+
+        parallel_for_(Range(0, width * height), [&](const Range& range) {
+            for (int r = range.start; r < range.end; r++)
+            {
+                double original_pixel = static_cast<double>(original_color_ptr[r])/255;
+                double smoothed_pixel = static_cast<double>(smoothed_color_ptr[r])/255;
+                double delta = static_cast<double>(abs(original_pixel - smoothed_pixel));
+                double intensity = delta;
+                double probability_pixel = static_cast<double>(probability_mask_resized_ptr[r]) / 255;
+                TI += intensity * probability_pixel;
+            }
+            });
+
+        TI = ((gamma * TI)/255) + beta;
+        TIs.emplace_back(TI);
+    }
+    return TIs;
+}
+
+std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, const cv::Mat& probability_mask, vector<double> TIs)
 {
     cv::Mat bgr_channels_smoothed[3], bgr_channels_orig[3];
-    assert(!alfa <= 1 || !alfa >= 0);
-    double beta = 1 - alfa;
+    //if (alfa > 1 || alfa < 0)
+    //    throw std::invalid_argument("Alfa should be between 0 and 1");
     cv::split(smoothed.clone(), bgr_channels_smoothed);
     cv::split(orig.clone(), bgr_channels_orig);
     int J = 3;
@@ -277,17 +339,19 @@ std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, double
     std::vector<cv::Mat> colors;
     for (int color = 0; color < 3; ++color)
     {
+        double alfa = TIs[color];
+        double beta = 1 - alfa;
         bgr_channels_smoothed[color].convertTo(double_smoothed, CV_64F);
         bgr_channels_orig[color].convertTo(double_orig, CV_64F);
         double* color_smoothed = double_smoothed.ptr<double>(0);
         double* color_orig = double_orig.ptr<double>(0);
 
         const char* name = "db2";
-        deleted_unique_ptr<wave_set> obj_smoothed(wave_init(name), [](wave_set* f) { wave_free(f); });
-        deleted_unique_ptr<wave_set> obj_orig(wave_init(name), [](wave_set* f) { wave_free(f); });
+        std::unique_ptr <wave_set, Deleter> obj_smoothed(wave_init(name), Deleter());
+        std::unique_ptr <wave_set, Deleter> obj_orig(wave_init(name), Deleter());
 
-        deleted_unique_ptr<wt2_set> wt_smoothed(wt2_init(obj_smoothed.get(), "dwt", smoothed.rows, smoothed.cols, J), [](wt2_set* f) { wt2_free(f); });
-        deleted_unique_ptr<wt2_set> wt_original(wt2_init(obj_orig.get(), "dwt", orig.rows, orig.cols, J), [](wt2_set* f) { wt2_free(f); });
+        std::unique_ptr <wt2_set, Deleter> wt_smoothed(wt2_init(obj_smoothed.get(), "dwt", smoothed.rows, smoothed.cols, J), Deleter());
+        std::unique_ptr <wt2_set, Deleter> wt_original(wt2_init(obj_orig.get(), "dwt", orig.rows, orig.cols, J), Deleter());
 
         constexpr size_t kTotalParts = 3;
             struct {
@@ -295,20 +359,23 @@ std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, double
             int columns;
         } parts_smoothed[kTotalParts], parts_original[kTotalParts];
 
-        deleted_unique_ptr<double> wavecoeffs_orig( dwt2(wt_original.get(), color_orig), [](double* f) { free(f); });
-        deleted_unique_ptr<double> wavecoeffs_smoothed( dwt2(wt_smoothed.get(), color_smoothed), [](double* f) { free(f); });
+        std::unique_ptr <double, Deleter> wavecoeffs_orig(dwt2(wt_original.get(), color_orig), Deleter());
+        std::unique_ptr <double, Deleter> wavecoeffs_smoothed(dwt2(wt_smoothed.get(), color_smoothed), Deleter());
+        
+        std::vector<cv::Mat> coefficients_HHi_original_mat, coefficients_HHi_smoothed_mat;
+        for (int i = 0; i < J; ++i)
+        {
+            coefficients_HHi_original_mat.emplace_back(cv::Mat(parts_original[i].row, parts_original[i].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), i+1, 'D', &parts_original[i].row, &parts_original[i].columns)));
+            coefficients_HHi_smoothed_mat.emplace_back(cv::Mat(parts_original[i].row, parts_original[i].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), i+1, 'D', &parts_original[i].columns, &parts_original[i].columns)));
+        }
 
-        cv::Mat coefficients_HH1_original_mat(parts_original[0].row, parts_original[0].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), 1, 'D', &parts_original[0].row, &parts_original[0].columns));
-        cv::Mat coefficients_HH2_original_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), 2, 'D', &parts_original[1].row, &parts_original[1].columns));
-        cv::Mat coefficients_HH3_original_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), 3, 'D', &parts_original[2].row, &parts_original[2].columns));
-
-        cv::Mat coefficients_HH1_smoothed_mat(parts_original[0].row, parts_original[0].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 1, 'D', &parts_original[0].columns, &parts_original[0].columns));
-        cv::Mat coefficients_HH2_smoothed_mat(parts_original[1].row, parts_original[1].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 2, 'D', &parts_original[1].columns, &parts_original[1].columns));
-        cv::Mat coefficients_HH3_smoothed_mat(parts_original[2].row, parts_original[2].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), 3, 'D', &parts_original[2].columns, &parts_original[2].columns));
-
-        cv::addWeighted(coefficients_HH1_original_mat, alfa, coefficients_HH1_smoothed_mat, beta, 0, coefficients_HH1_smoothed_mat);
-        cv::addWeighted(coefficients_HH2_original_mat, alfa, coefficients_HH2_smoothed_mat, beta, 0, coefficients_HH2_smoothed_mat);
-        cv::addWeighted(coefficients_HH3_original_mat, alfa, coefficients_HH3_smoothed_mat, beta, 0, coefficients_HH3_smoothed_mat);
+        cv::addWeighted(coefficients_HHi_original_mat[0], alfa, coefficients_HHi_smoothed_mat[0], beta, 0, coefficients_HHi_smoothed_mat[0]);
+        alfa = alfa * 0.5;
+        beta = 1 - alfa;
+        cv::addWeighted(coefficients_HHi_original_mat[1], alfa, coefficients_HHi_smoothed_mat[1], beta, 0, coefficients_HHi_smoothed_mat[1]);
+        alfa = alfa * 0.5;
+        beta = 1 - alfa;
+        cv::addWeighted(coefficients_HHi_original_mat[2], alfa, coefficients_HHi_smoothed_mat[2], beta, 0, coefficients_HHi_smoothed_mat[2]);
 
         cv::Mat output_matrix = cv::Mat::zeros(smoothed.rows, smoothed.cols, CV_64F);
 
@@ -329,15 +396,18 @@ std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, double
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir, double alfa) {
     std::vector<cv::Mat> masks = MaskGenerate(src, model_dir);
 
+    cv::Mat probability_mask = masks[4];
+
     cv::Mat orig = masks[3];
 
     cv::Mat smoothed = Smoothing(masks);
 
-    std::vector<cv::Mat> colors = Restore(orig, smoothed, alfa);
+    std::vector<double> TIs = CalculateTI(probability_mask, orig, smoothed);
 
-    cv::Mat final_eachCh[3] = { colors[0], colors[1], colors[2] };
+    std::vector<cv::Mat> colors(Restore(orig, smoothed, probability_mask, TIs));
+
     cv::Mat final_colors;
-    cv::merge(final_eachCh, 3, final_colors);
+    cv::merge(cv::_InputArray(colors), final_colors);
 
     return final_colors;
 }
@@ -348,7 +418,7 @@ cv::Mat RetouchingImg(const std::string& image_dir, const std::string& model_dir
     if (input_img.empty()) {
         std::cout << "Could not open or find the image: " << image_dir << "\n"
             << "The image should be located in `images_dir`.\n";
-        assert(false);
+        throw std::invalid_argument("Input image path is empty");
     }
     return Retouching(input_img, model_dir,alfa);
 }
