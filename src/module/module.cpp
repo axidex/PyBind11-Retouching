@@ -437,9 +437,9 @@ PYBIND11_MODULE(smoothingmodule, module)
 
 	module.doc() = "smoothingmodule";
 
-	module.def("Retouching", &Retouching, "Retouching function\n\nArguments:\n\tsrc : array like\n\tinput image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput :array like\n\toutput image"
+	module.def("Retouching", &Retouching, "Retouching function\n\nArguments:\n\tsrc : array like\n\tinput image\nmodelDir : string\n\t path to the your model\n\nReturns\noutput :array like\n\toutput image"
         , py::arg("src"), py::arg("model_dir"), py::arg("alfa"));
-    module.def("RetouchingImg", &RetouchingImg, "Retouching function\n\nArguments:\n\timgDir : string\n\tpath to input image\nmodelDir : string\n\t path to the your model\nalfa : float\n\tcoefficient for wavelet transform\n\nReturns\noutput : array like\n\toutput image"
+    module.def("RetouchingImg", &RetouchingImg, "Retouching function\n\nArguments:\n\timgDir : string\n\tpath to input image\nmodelDir : string\n\t path to the your model\n\nReturns\noutput : array like\n\toutput image"
         , py::arg("image_dir"), py::arg("model_dir"), py::arg("alfa"));
     module.def("Show", &Show, "imshow", py::arg("mat"));
 }
