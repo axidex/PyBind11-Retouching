@@ -222,7 +222,6 @@ std::vector<cv::Mat> MaskGenerate(const cv::Mat& src,const string& model_dir)
     cv::Mat final_face_not, final_face;
     cv::bitwise_and(work_image, final_mask, final_face);
     cv::bitwise_and(work_image, final_mask_not, final_face_not);
-    cv::imwrite("probability_mask.jpg", probability_mask);
     return std::vector({ final_face, final_face_not, mask_img_not, input_img, probability_mask });
 }
 
@@ -393,7 +392,7 @@ std::vector<cv::Mat> Restore(const cv::Mat& orig,const cv::Mat& smoothed, const 
     return std::vector({ converted_matrix_blue, converted_matrix_green, converted_matrix_red });
 }
 
-cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir, double alfa) {
+cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     std::vector<cv::Mat> masks = MaskGenerate(src, model_dir);
 
     cv::Mat probability_mask = masks[4];
@@ -412,7 +411,7 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir, double alfa
     return final_colors;
 }
 
-cv::Mat RetouchingImg(const std::string& image_dir, const std::string& model_dir, double alfa) {
+cv::Mat RetouchingImg(const std::string& image_dir, const std::string& model_dir) {
     const auto input_img =
         cv::imread(cv::samples::findFile(image_dir, /*required=*/false, /*silentMode=*/true));
     if (input_img.empty()) {
@@ -420,7 +419,7 @@ cv::Mat RetouchingImg(const std::string& image_dir, const std::string& model_dir
             << "The image should be located in `images_dir`.\n";
         throw std::invalid_argument("Input image path is empty");
     }
-    return Retouching(input_img, model_dir,alfa);
+    return Retouching(input_img, model_dir);
 }
 
 void Show(cv::Mat mat)
