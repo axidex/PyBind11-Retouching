@@ -9,8 +9,8 @@ This project is an unofficial implementation of [FabSoften: face beautification 
 
 # Requirements
 
-Make sure that you have all libs in /external   
-Also you should install OpenCV
+* Make sure that you have all libs in /external   
+* Also you should install OpenCV
 
 # Building
 
@@ -25,8 +25,8 @@ Only Release
 
 # After Compiling
 
-* Put necessary dll's into the Release folder  
-* All necessary dll's you can find in assets or you can manually add it via building and compiling OpenCV
+Put necessary dll's into the Release folder  
+All necessary dll's you can find in assets or you can manually add it via building and compiling OpenCV
 
 # Example of work in python
 
