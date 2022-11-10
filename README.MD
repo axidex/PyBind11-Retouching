@@ -25,8 +25,8 @@ Only Release
 
 # After Compiling
 
-Put necessary dll's into the Release folder  
-All necessary dll's you can find in assets or you can manually add it via building and compiling OpenCV
+* Put necessary dll's into the Release folder  
+* All necessary dll's you can find in assets or you can manually add it via building and compiling OpenCV
 
 # Example of work in python
 
