@@ -39,8 +39,6 @@
 #include <time.h>
 
 //Use the namespace of CV and STD
-using namespace std;
-using namespace cv;
 
 class JointWMF{
 
@@ -77,7 +75,7 @@ public:
 	 */
 	/***************************************************************/
 
-	static Mat filter(Mat &I, Mat &feature, int r, float sigma=25.5, int nI=256, int nF=256, int iter=1, string weightType="exp", Mat mask=Mat());
+	static cv::Mat filter(cv::Mat & I, cv::Mat & feature, int r, float sigma = 25.5, int nI = 256, int nF = 256, int iter = 1, std::string weightType = "exp", cv::Mat mask = cv::Mat());
 
 	/***************************************************************/
 	/* Function: filterCore
@@ -95,7 +93,7 @@ public:
 	 */
 	/***************************************************************/
 
-	static Mat filterCore(Mat &I, Mat &F, float **wMap, int r=20, int nF=256, int nI=256, Mat mask=Mat());
+	static cv::Mat filterCore(cv::Mat &I, cv::Mat &F, float **wMap, int r=20, int nF=256, int nI=256, cv::Mat mask= cv::Mat());
 
 private:
 
@@ -135,7 +133,7 @@ private:
 	 *				If F is 3-channel, perform k-means clustering
 	 *				If F is 1-channel, only perform type-casting
 	/***************************************************************/
-	static void featureIndexing(Mat &F, float **&wMap, int &nF, float sigmaI, string weightType);
+	static void featureIndexing(cv::Mat &F, float **&wMap, int &nF, float sigmaI, std::string weightType);
 
 	/***************************************************************/
 	/* Function: from32FTo32S
@@ -145,13 +143,13 @@ private:
 	 *				The function also return a mapping between quantized value (32F) and quantized index (32S).
 	 *				The mapping is used to convert integer image back to floating-point image after filtering.
 	/***************************************************************/
-	static void from32FTo32S(Mat &img, Mat &outImg, int nI, float *mapping);
+	static void from32FTo32S(cv::Mat &img, cv::Mat &outImg, int nI, float *mapping);
 
 	/***************************************************************/
 	/* Function: from32STo32F
 	 * Description: convert the quantization index image back to the floating-point image accroding to the mapping
 	/***************************************************************/
-	static void from32STo32F(Mat &img, Mat &outImg, float *mapping);
+	static void from32STo32F(cv::Mat &img, cv::Mat &outImg, float *mapping);
 };
 
 #endif
