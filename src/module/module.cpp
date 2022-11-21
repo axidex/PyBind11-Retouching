@@ -473,7 +473,7 @@ cv::Mat RetouchingImg(const std::string& image_dir, const std::string& model_dir
 
 void Show(cv::Mat mat)
 {
-    imshow("mat", mat);
+    cv::imshow("mat", mat);
     cv::waitKey();
     cv::destroyAllWindows();
 }
