@@ -173,16 +173,13 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         cv::Mat mask_channels[3] = { face_masks[face], face_masks[face], face_masks[face] };
         cv::Mat mask_img_3_channels;
         cv::merge(mask_channels, 3, mask_img_3_channels);
-        cv::Mat spot_image, spot_image_temp;
+        cv::Mat spot_image_temp;
         cv::Mat mask_img_not, mask_GF;
-
+        // Guided Filter
         cv::bitwise_and(input_img, mask_img_3_channels, spot_image_temp);
-
         cv::ximgproc::guidedFilter(spot_image_temp, mask_img_3_channels, mask_GF, 10, 200); //10 200
         cv::bitwise_not(mask_GF, mask_img_not);
         mask_img_not_vec.push_back(mask_img_not.clone());
-
-        cv::bitwise_and(input_img, mask_GF, spot_image);
 
         // Inner mask
         cv::Mat mask_morphology_Ex;
@@ -218,6 +215,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         cv::Mat not_DoG_image_3_channels;
         cv::merge(not_DoG_images, 3, not_DoG_image_3_channels);
 
+        // Creating final mask
         cv::Mat final_mask, final_mask_not;
 
         cv::bitwise_and(mask_GF, not_DoG_image_3_channels, final_mask);
@@ -226,6 +224,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         cv::threshold(final_mask, final_mask, 230, 255, cv::THRESH_BINARY);
 
         cv::bitwise_not(final_mask, final_mask_not);
+        // Creating final face and not face
         cv::Mat final_face_not, final_face;
         cv::bitwise_and(work_image, final_mask, final_face);
         final_face_vec.emplace_back(final_face.clone());

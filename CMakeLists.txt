@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.16)
 project("pybind-smoothing")
 #set(ENGINE_PROJECT_NAME smoothingmodule)
 
+if (UNIX)
+    set( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall --std=c++20 -O3 -fPIC" )
+    set( CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -Wall -O3 -fPIC" )
+endif (UNIX)
+
 set(CMAKE_CXX_STANDARD 20)
 
 set(MODULE_SOURCE "${PROJECT_SOURCE_DIR}/src/module")
@@ -24,7 +29,6 @@ set(FILTER_PUBLIC_SRC
 set(CONVERTER_PUBLIC_SRC
     src/module/ndarray_converter.cpp
 )
-
 
 add_library(Filter STATIC ${FILTER_PUBLIC_SRC})
 target_include_directories(Filter PRIVATE src/module/)
