@@ -46,7 +46,7 @@ All necessary dll's you can find in assets or you can manually add it via buildi
   - [ ] Dynamic Smoothing Hyperparameter
 - [x] Skin Texture Restoration (DWT)
 
-# Conclusion
+# Probability mask solution
 
 In Fabsoften paper they used GMM Clustering and Segmentation via CNN to create probability mask, but with Guided Filter and DoG we can also create probability mask  
 
