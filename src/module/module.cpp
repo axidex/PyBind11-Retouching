@@ -27,6 +27,72 @@
 //#include <chrono>
 //#include <typeinfo>
 
+void GMM(const cv::Mat& src, cv::Mat& dst) {
+    // Define 5 colors with a maximum classification of no more than 5
+    int width = src.cols;
+    int height = src.rows;
+    int dims = src.channels();
+
+    int nsamples = width * height;
+    cv::Mat points(nsamples, dims, CV_64FC1);
+    cv::Mat labels;
+    cv::Mat result = cv::Mat::zeros(src.size(), CV_64FC1);
+
+    // Define classification, that is, how many classification points of function K value
+    int num_cluster = 5;
+    //printf("num of num_cluster is %d\n", num_cluster);
+    // Image RGB pixel data to sample data
+    int index = 0;
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            index = row * width + col;
+            cv::Vec3b rgb = src.at<cv::Vec3b>(row, col);
+            points.at<double>(index, 0) = static_cast<int>(rgb[0]);
+            points.at<double>(index, 1) = static_cast<int>(rgb[1]);
+            points.at<double>(index, 2) = static_cast<int>(rgb[2]);
+        }
+    }
+
+    // EM Cluster Train
+    cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
+    // Partition number
+    em_model->setClustersNumber(num_cluster);
+    // Set covariance matrix type
+    em_model->setCovarianceMatrixType(cv::ml::EM::COV_MAT_SPHERICAL);
+    // Set convergence conditions
+    em_model->setTermCriteria(
+        cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 100, 0.1));
+    // Store the probability partition to labs EM according to the sample training
+    em_model->trainEM(points, cv::noArray(), labels, cv::noArray());
+
+    // Mark color and display for each pixel
+    cv::Mat sample(1, dims, CV_64FC1); //
+    int r = 0, g = 0, b = 0;
+    // Put each pixel in the sample
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            index = row * width + col;
+
+            // Get the color of each channel
+            b = src.at<cv::Vec3b>(row, col)[0];
+            g = src.at<cv::Vec3b>(row, col)[1];
+            r = src.at<cv::Vec3b>(row, col)[2];
+
+            // Put pixels in sample data
+            sample.at<double>(0, 0) = static_cast<double>(b);
+            sample.at<double>(0, 1) = static_cast<double>(g);
+            sample.at<double>(0, 2) = static_cast<double>(r);
+
+            double response = em_model->predict2(sample, cv::noArray())[0];
+            double prob = exp(response);
+            
+            result.at<double>(row, col) = prob;
+        }
+    }
+    cv::imwrite("gmm.jpg", result);
+    dst = result.clone();
+}
+
 tinyspline::BSpline GetCurve(int n, int nend, const dlib::full_object_detection& shape)
 {
     std::vector<tinyspline::real> knots;
@@ -303,43 +369,36 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
         std::vector<double> coefs; // bgr
         double gamma = 0.5;
         double beta = 1;
-        cv::Mat probability_mask_resized, smoothed_resized;
+        cv::Mat probability_mask, smoothed_face;
 
         cv::Mat bgr_channels_smoothed[3], bgr_channels_orig[3];
-
+        cv::Mat bgr_channels_mask[3];
         cv::split(original, bgr_channels_orig);
 
+        int width = bgr_channels_orig[0].rows;
+        int height = bgr_channels_orig[0].cols;
+
+
+        smoothed_face = smoothed[face];
+        cv::split(smoothed_face.clone(), bgr_channels_smoothed);
+        probability_mask = probability_masks[face];
+        
         for (int color = 0; color < 3; ++color)
         {
-            cv::Mat original_color, smoothed_color;
-            original_color = bgr_channels_orig[color];
-            int width = original_color.rows;
-            int height = original_color.cols;
-            resize(smoothed[face], smoothed_resized, cv::Size(height, width), 0, 0, cv::INTER_CUBIC);
-            cv::split(smoothed_resized.clone(), bgr_channels_smoothed);
-            smoothed_color = bgr_channels_smoothed[color];
+            cv::Mat original_color = bgr_channels_orig[color];
+            cv::Mat smoothed_color = bgr_channels_smoothed[color];
+            cv::Mat divided_original_color = original_color / 255;
+            cv::Mat divided_smoothed_color = smoothed_color / 255;
 
-            resize(probability_masks[face], probability_mask_resized, cv::Size(height, width), 0, 0, cv::INTER_CUBIC);
+            cv::Mat subtracted_abs_original_smoothed = cv::abs(original_color - smoothed_color);
+            cv::Mat double_subtracted_abs_original_smoothed;
+            subtracted_abs_original_smoothed.convertTo(double_subtracted_abs_original_smoothed, CV_64FC1);
+            cv::Mat product_probs_intensity = double_subtracted_abs_original_smoothed.mul(probability_mask);
 
-            double coef = 0;
+            double coef = cv::sum(product_probs_intensity)[0];
 
-            uchar* original_color_ptr = original_color.data;
-            uchar* smoothed_color_ptr = smoothed_color.data;
-            uchar* probability_mask_resized_ptr = probability_mask_resized.data;
-
-            parallel_for_(cv::Range(0, width * height), [&](const cv::Range& range) {
-                for (size_t r = range.start; r < range.end; r++)
-                {
-                    double original_pixel = static_cast<double>(original_color_ptr[r]) / 255;
-                    double smoothed_pixel = static_cast<double>(smoothed_color_ptr[r]) / 255;
-                    double delta = static_cast<double>(abs(original_pixel - smoothed_pixel));
-                    double intensity = delta;
-                    double probability_pixel = static_cast<double>(probability_mask_resized_ptr[r]) / 255;
-                    coef += intensity * probability_pixel;
-                }
-                });
-
-            coef = ((gamma * coef) / 255) + beta;
+            coef = ((gamma * coef) / (255)) + beta;
+            //std::cout << coef << std::endl;
             coefs.emplace_back(coef);
         }
         faces_coefs.emplace_back(coefs);
@@ -392,7 +451,7 @@ std::vector<std::vector<cv::Mat>> Restore(const cv::Mat& orig, const std::vector
             for (int i = 0; i < kLevel; ++i)
             {
                 coefficients_HHi_original_mat.emplace_back(cv::Mat(parts_original[i].row, parts_original[i].columns, CV_64F, getWT2Coeffs(wt_original.get(), wavecoeffs_orig.get(), i + 1, 'D', &parts_original[i].row, &parts_original[i].columns)));
-                coefficients_HHi_smoothed_mat.emplace_back(cv::Mat(parts_original[i].row, parts_original[i].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), i + 1, 'D', &parts_original[i].columns, &parts_original[i].columns)));
+                coefficients_HHi_smoothed_mat.emplace_back(cv::Mat(parts_original[i].row, parts_original[i].columns, CV_64F, getWT2Coeffs(wt_smoothed.get(), wavecoeffs_smoothed.get(), i + 1, 'D', &parts_original[i].row, &parts_original[i].columns)));
                 cv::addWeighted(coefficients_HHi_original_mat[i], alfa, coefficients_HHi_smoothed_mat[i], beta, 0, coefficients_HHi_smoothed_mat[i]);
                 if (i == kLevel - 1)
                     break;
@@ -418,20 +477,52 @@ std::vector<std::vector<cv::Mat>> Restore(const cv::Mat& orig, const std::vector
     return restored_faces;
 }
 
+std::vector<cv::Mat> ProbMaskGenerate(const std::vector<cv::Mat>& probability_masks, const cv::Mat& orig)
+{
+    cv::Mat gmm;
+    GMM(orig, gmm);
+    std::vector<cv::Mat> gmm_masks;
+    for (int face = 0; face < probability_masks.size(); ++face)
+    {
+        cv::Mat bgr_channels_mask[3];
+        cv::Mat gmm_copy = gmm.clone();
+        cv::split(probability_masks[face].clone(), bgr_channels_mask);
+        int width = gmm.rows;
+        int height = gmm.cols;
+        cv::Mat tmp_mask;
+        tmp_mask = bgr_channels_mask[0];
+
+        parallel_for_(cv::Range(0, width * height), [&](const cv::Range& range) {
+            for (int r = range.start; r < range.end; r++)
+            {
+                if (tmp_mask.at<uchar>(r) == 0)
+                {
+                    gmm_copy.at<double>(r) = 0;
+                }
+            }
+            });
+        gmm_masks.emplace_back(gmm_copy.clone());
+    }
+    return gmm_masks;
+}
+
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     std::vector < std::vector<cv::Mat> > masks_by_faces = MaskGenerate(src, model_dir);
 
     std::vector <cv::Mat> probability_masks = masks_by_faces[4];
-
+    
     cv::Mat orig = masks_by_faces[3][0];
+
+    std::vector<cv::Mat> gmm_masks = ProbMaskGenerate(masks_by_faces[5], orig);
 
     std::vector <cv::Mat> smoothed = Smoothing(masks_by_faces);
 
-    std::vector<std::vector<double>> coefs = CalculateCoef(probability_masks, orig, smoothed);
+    std::vector<std::vector<double>> coefs = CalculateCoef(gmm_masks, orig, smoothed);
 
     std::vector<std::vector<cv::Mat>> faces(Restore(orig, smoothed, coefs));
 
     std::vector<cv::Mat> restored_faces, restored_faces_by_mask;
+
     for (auto face : faces)
     {
         cv::Mat final_clrs;
