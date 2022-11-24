@@ -6,7 +6,14 @@ This project is an unofficial implementation of [FabSoften: face beautification 
 ![](./assets/3in11skin.png)  
 ## Eye and hair
 ![](./assets/3in11eyeandhair.png)
-
+# Another skin samples
+## 1
+![](./assets/Sample1.png)
+## 2
+![](./assets/Sample2.png)  
+![](./assets/Sample2Macro.png)
+## 3
+![](./assets/Sample3.png)
 # Requirements
 
 * Make sure that you have all libs in /external   
@@ -19,13 +26,11 @@ mkdir build
 cd build
 cmake ..
 ```
-# Compiling
-
-Only Release
 
 # After Compiling
 
-Put necessary dll's into the Release folder  
+(Only Windows issue for me, on Linux it works perfectly without this step)
+Put necessary dll's into the Release folder 
 All necessary dll's you can find in assets or you can manually add it via building and compiling OpenCV
 
 # Example of work in python
@@ -37,7 +42,6 @@ All necessary dll's you can find in assets or you can manually add it via buildi
 - [x] Preprocessing
   - [x] Landmark Detection
   - [x] Binary Skin Mask
-  - [x] Blemish Detection and Concealment
 - [x] Skin Mask Generation and Refinement
   - [x] GMM Clustering
   - [x] Guided Feathering
