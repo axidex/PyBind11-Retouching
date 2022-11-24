@@ -39,18 +39,11 @@ All necessary dll's you can find in assets or you can manually add it via buildi
   - [x] Binary Skin Mask
   - [x] Blemish Detection and Concealment
 - [x] Skin Mask Generation and Refinement
-  - [ ] GMM Clustering
-  - [ ] Segmentation
+  - [x] GMM Clustering
   - [x] Guided Feathering
 - [x] Skin Imperfection Smoothing
   - [ ] Dynamic Smoothing Hyperparameter
 - [x] Skin Texture Restoration (DWT)
-
-# Probability mask solution
-
-In Fabsoften paper they used GMM Clustering and Segmentation via CNN to create probability mask, but with Guided Filter and DoG we can also create probability mask  
-
-![](./assets/probability_mask.jpg)
 
 # Functions
 
