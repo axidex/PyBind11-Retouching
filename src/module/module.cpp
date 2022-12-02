@@ -67,6 +67,13 @@ void GMM(const cv::Mat& src, cv::Mat& dst) {
 
     // Mark color and display for each pixel
     cv::Mat sample(1, dims, CV_64FC1); //
+
+    std::vector<cv::Mat> cov;
+
+    cv::Mat weights = em_model->getWeights();
+    cv::Mat means = em_model->getMeans();
+    em_model->getCovs(cov);
+    //std::cout << "mean:" << means.size << " weights:" << weights.size << " cov:" << cov.size() << " x " << cov[0].size << std::endl;
     int r = 0, g = 0, b = 0;
     // Put each pixel in the sample
     for (int row = 0; row < height; row++) {
@@ -82,14 +89,29 @@ void GMM(const cv::Mat& src, cv::Mat& dst) {
             sample.at<double>(0, 0) = static_cast<double>(b);
             sample.at<double>(0, 1) = static_cast<double>(g);
             sample.at<double>(0, 2) = static_cast<double>(r);
-
-            double response = em_model->predict2(sample, cv::noArray())[0];
-            double prob = exp(response);
+            
+            double prob = 0;
+            
+            for (int i = 0; i < cov.size(); ++i)
+            {
+                //cv::Mat means_vec(1, dims, CV_64FC1);
+                //cv::Mat cov_mat(dims, dims, CV_64FC1);
+                cv::Mat cov_mat = cov[i];
+                cv::Mat means_vec = means.row(i);
+                cv::Mat cov_mat_sqrt; 
+                cv::pow(cov_mat, 0.5, cov_mat_sqrt);
+                double tmp_first = 1 / (pow(2 * 3.1415926, dims) * cv::determinant(cov_mat_sqrt));
+                cv::Mat tmp_second =  - 0.5 * ((sample - means_vec) * cov_mat.inv() * (sample - means_vec).t());
+                cv::exp(tmp_second, tmp_second);
+                prob += weights.at<double>(0, i) * tmp_first * tmp_second.at<double>(0, 0);
+            }
+            //double response = em_model->predict2(sample, cv::noArray())[0];
+            //double prob = exp(response);
             
             result.at<double>(row, col) = prob;
         }
     }
-    cv::imwrite("gmm.jpg", result);
+
     dst = result.clone();
 }
 
@@ -398,11 +420,12 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
             double coef = cv::sum(product_probs_intensity)[0];
 
             coef = ((gamma * coef) / (255)) + beta;
-            //std::cout << coef << std::endl;
+            std::cout << coef << std::endl;
             coefs.emplace_back(coef);
         }
         faces_coefs.emplace_back(coefs);
     }
+
     
     return faces_coefs;
 }
@@ -518,7 +541,7 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     std::vector <cv::Mat> smoothed = Smoothing(masks_by_faces);
 
     std::vector<std::vector<double>> coefs = CalculateCoef(gmm_masks, orig, smoothed);
-
+    
     std::vector<std::vector<cv::Mat>> faces(Restore(orig, smoothed, coefs));
 
     std::vector<cv::Mat> restored_faces, restored_faces_by_mask;
