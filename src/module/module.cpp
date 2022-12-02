@@ -22,37 +22,57 @@
 #include <algorithm>
 #include <memory>
 #include <functional>
+#include <random>
 
 // debugging libs
-//#include <chrono>
+#include <chrono>
 //#include <typeinfo>
 
-void GMM(const cv::Mat& src, cv::Mat& dst) {
+template<typename T>
+T random(T range_from, T range_to)
+{
+    std::random_device                  rand_dev;
+    std::mt19937                        generator(rand_dev());
+    std::uniform_int_distribution<T>    distr(range_from, range_to);
+    return distr(generator);
+}
+
+cv::Mat GMM(const cv::Mat& src, const cv::Mat& orig)
+{
     // Define 5 colors with a maximum classification of no more than 5
+
     int width = src.cols;
     int height = src.rows;
     int dims = src.channels();
 
-    int nsamples = width * height;
+    int nsamples = 1000;
     cv::Mat points(nsamples, dims, CV_64FC1);
     cv::Mat labels;
-    cv::Mat result = cv::Mat::zeros(src.size(), CV_64FC1);
+    cv::Mat result = cv::Mat::zeros(orig.size(), CV_64FC1);
 
     // Define classification, that is, how many classification points of function K value
-    int num_cluster = 5;
+    int num_cluster = 3;
     //printf("num of num_cluster is %d\n", num_cluster);
     // Image RGB pixel data to sample data
     int index = 0;
-    for (int row = 0; row < height; row++) {
-        for (int col = 0; col < width; col++) {
-            index = row * width + col;
-            cv::Vec3b rgb = src.at<cv::Vec3b>(row, col);
-            points.at<double>(index, 0) = static_cast<int>(rgb[0]);
-            points.at<double>(index, 1) = static_cast<int>(rgb[1]);
-            points.at<double>(index, 2) = static_cast<int>(rgb[2]);
+
+    int it = 0;
+
+    while (points.at<double>(999, 0) == 0 && points.at<double>(999, 1) == 0 && points.at<double>(999, 2) == 0)
+    {
+        int rand_width = random<int>(0, width);
+        int rand_height = random<int>(0, height);
+        int blue = src.at<cv::Vec3b>(rand_height, rand_width)[0];
+        int green = src.at<cv::Vec3b>(rand_height, rand_width)[1];
+        int red = src.at<cv::Vec3b>(rand_height, rand_width)[2];
+        if (blue != 0 || green != 0 || red != 0)
+        {
+            points.at<double>(it, 0) = static_cast<double>(blue);
+            points.at<double>(it, 1) = static_cast<double>(green);
+            points.at<double>(it, 2) = static_cast<double>(red);
+            it++;
         }
     }
-
     // EM Cluster Train
     cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
     // Partition number
@@ -64,7 +84,6 @@ void GMM(const cv::Mat& src, cv::Mat& dst) {
         cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 100, 0.1));
     // Store the probability partition to labs EM according to the sample training
     em_model->trainEM(points, cv::noArray(), labels, cv::noArray());
-
     // Mark color and display for each pixel
     cv::Mat sample(1, dims, CV_64FC1); //
 
@@ -73,46 +92,60 @@ void GMM(const cv::Mat& src, cv::Mat& dst) {
     cv::Mat weights = em_model->getWeights();
     cv::Mat means = em_model->getMeans();
     em_model->getCovs(cov);
+    width = orig.cols;
+    height = orig.rows;
+    dims = orig.channels();
     //std::cout << "mean:" << means.size << " weights:" << weights.size << " cov:" << cov.size() << " x " << cov[0].size << std::endl;
     int r = 0, g = 0, b = 0;
+
+    std::vector<double> determinant_cov_mat_sqrt;
+    std::vector<cv::Mat> inv_cov_mat;
+
+    for (int i = 0; i < cov.size(); ++i)
+    {
+        cv::Mat cov_mat = cov[i];
+        cv::Mat cov_mat_sqrt;
+        cv::pow(cov_mat, 0.5, cov_mat_sqrt);
+        inv_cov_mat.emplace_back(cov_mat.inv());
+        determinant_cov_mat_sqrt.emplace_back(cv::determinant(cov_mat_sqrt));
+    }
+    double pi_dims = pow(2 * 3.1415926, dims);
     // Put each pixel in the sample
     for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {
-            index = row * width + col;
-
             // Get the color of each channel
-            b = src.at<cv::Vec3b>(row, col)[0];
-            g = src.at<cv::Vec3b>(row, col)[1];
-            r = src.at<cv::Vec3b>(row, col)[2];
+            b = orig.at<cv::Vec3b>(row, col)[0];
+            g = orig.at<cv::Vec3b>(row, col)[1];
+            r = orig.at<cv::Vec3b>(row, col)[2];
+            if (b == 0 && g == 0 && r == 0)
+                continue;
 
             // Put pixels in sample data
             sample.at<double>(0, 0) = static_cast<double>(b);
             sample.at<double>(0, 1) = static_cast<double>(g);
             sample.at<double>(0, 2) = static_cast<double>(r);
-            
+
             double prob = 0;
-            
+
             for (int i = 0; i < cov.size(); ++i)
             {
                 //cv::Mat means_vec(1, dims, CV_64FC1);
                 //cv::Mat cov_mat(dims, dims, CV_64FC1);
-                cv::Mat cov_mat = cov[i];
                 cv::Mat means_vec = means.row(i);
-                cv::Mat cov_mat_sqrt; 
-                cv::pow(cov_mat, 0.5, cov_mat_sqrt);
-                double tmp_first = 1 / (pow(2 * 3.1415926, dims) * cv::determinant(cov_mat_sqrt));
-                cv::Mat tmp_second =  - 0.5 * ((sample - means_vec) * cov_mat.inv() * (sample - means_vec).t());
+                double tmp_first = 1 / (pi_dims * determinant_cov_mat_sqrt[i]);
+                cv::Mat tmp_second = -0.5 * ((sample - means_vec) * inv_cov_mat[i] * (sample - means_vec).t());
                 cv::exp(tmp_second, tmp_second);
                 prob += weights.at<double>(0, i) * tmp_first * tmp_second.at<double>(0, 0);
             }
+
             //double response = em_model->predict2(sample, cv::noArray())[0];
             //double prob = exp(response);
-            
+
             result.at<double>(row, col) = prob;
         }
     }
 
-    dst = result.clone();
+    return result.clone();
 }
 
 tinyspline::BSpline GetCurve(int n, int nend, const dlib::full_object_detection& shape)
@@ -247,7 +280,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         const auto box = cv::fitEllipseDirect(lower_face_points);
         cv::Mat mask_tmp = cv::Mat(mask_image.size(), CV_8UC1, cv::Scalar(255));
         cv::ellipse(mask_tmp, box, cv::Scalar(0), /*thickness=*/-1, cv::FILLED);
-        
+
 
         cv::bitwise_or(mask_tmp, mask_image, mask_image);
         cv::bitwise_not(mask_image, mask_image);
@@ -404,7 +437,7 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
         smoothed_face = smoothed[face];
         cv::split(smoothed_face.clone(), bgr_channels_smoothed);
         probability_mask = probability_masks[face];
-        
+
         for (int color = 0; color < 3; ++color)
         {
             cv::Mat original_color = bgr_channels_orig[color];
@@ -426,7 +459,7 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
         faces_coefs.emplace_back(coefs);
     }
 
-    
+
     return faces_coefs;
 }
 
@@ -500,12 +533,17 @@ std::vector<std::vector<cv::Mat>> Restore(const cv::Mat& orig, const std::vector
     return restored_faces;
 }
 
-std::vector<cv::Mat> ProbMaskGenerate(const std::vector<cv::Mat>& probability_masks, const cv::Mat& orig)
+std::vector<cv::Mat> ProbMaskGenerate(const cv::Mat& orig, const std::vector<cv::Mat>& final_face)
 {
-    cv::Mat gmm;
-    GMM(orig, gmm);
+
     std::vector<cv::Mat> gmm_masks;
-    for (int face = 0; face < probability_masks.size(); ++face)
+
+    for (int face = 0; face < final_face.size(); ++face)
+    {
+        gmm_masks.emplace_back(GMM(final_face[face], orig));
+    }
+
+    /*for (int face = 0; face < probability_masks.size(); ++face)
     {
         cv::Mat bgr_channels_mask[3];
         cv::Mat gmm_copy = gmm.clone();
@@ -525,27 +563,45 @@ std::vector<cv::Mat> ProbMaskGenerate(const std::vector<cv::Mat>& probability_ma
             }
             });
         gmm_masks.emplace_back(gmm_copy.clone());
-    }
+    }*/
     return gmm_masks;
 }
 
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
+
+
+    //std::chrono::duration<double> elapsed_seconds = end - start;
+    //std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
+    auto start_MaskGenerate = std::chrono::steady_clock::now();
     std::vector < std::vector<cv::Mat> > masks_by_faces = MaskGenerate(src, model_dir);
-
+    auto end_MaskGenerate = std::chrono::steady_clock::now();
     std::vector <cv::Mat> probability_masks = masks_by_faces[4];
-    
+
     cv::Mat orig = masks_by_faces[3][0];
-
-    std::vector<cv::Mat> gmm_masks = ProbMaskGenerate(masks_by_faces[5], orig);
-
+    auto start_ProbMaskGenerate = std::chrono::steady_clock::now();
+    std::vector<cv::Mat> gmm_masks = ProbMaskGenerate(orig, masks_by_faces[0]);
+    auto end_ProbMaskGenerate = std::chrono::steady_clock::now();
+    auto start_Smoothing = std::chrono::steady_clock::now();
     std::vector <cv::Mat> smoothed = Smoothing(masks_by_faces);
-
+    auto end_Smoothing = std::chrono::steady_clock::now();
+    auto start_CalculateCoef = std::chrono::steady_clock::now();
     std::vector<std::vector<double>> coefs = CalculateCoef(gmm_masks, orig, smoothed);
-    
+    auto end_CalculateCoef = std::chrono::steady_clock::now();
+    auto start_Restore = std::chrono::steady_clock::now();
     std::vector<std::vector<cv::Mat>> faces(Restore(orig, smoothed, coefs));
-
+    auto end_Restore = std::chrono::steady_clock::now();
     std::vector<cv::Mat> restored_faces, restored_faces_by_mask;
-
+    std::chrono::duration<double> elapsed_seconds = end_MaskGenerate - start_MaskGenerate;
+    std::cout << "elapsed time MaskGenerate: " << elapsed_seconds.count() << "s\n";
+    elapsed_seconds = end_ProbMaskGenerate - start_ProbMaskGenerate;
+    std::cout << "elapsed time ProbMaskGenerate: " << elapsed_seconds.count() << "s\n";
+    elapsed_seconds = end_Smoothing - start_Smoothing;
+    std::cout << "elapsed time Smoothing: " << elapsed_seconds.count() << "s\n";
+    elapsed_seconds = end_CalculateCoef - start_CalculateCoef;
+    std::cout << "elapsed time CalculateCoef: " << elapsed_seconds.count() << "s\n";
+    elapsed_seconds = end_Restore - start_Restore;
+    std::cout << "elapsed time Restore: " << elapsed_seconds.count() << "s\n";
+    auto start_PostProcessing = std::chrono::steady_clock::now();
     for (auto face : faces)
     {
         cv::Mat final_clrs;
@@ -569,7 +625,9 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     {
         cv::add(not_face, face, not_face);
     }
-
+    auto end_PostProcessing = std::chrono::steady_clock::now();
+    elapsed_seconds = end_PostProcessing - start_PostProcessing;
+    std::cout << "elapsed time PostProcessing: " << elapsed_seconds.count() << "s\n";
     return not_face;
 }
 
