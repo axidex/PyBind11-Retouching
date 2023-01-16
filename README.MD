@@ -43,8 +43,8 @@ All necessary dll's you can find in assets or you can manually add it via buildi
   - [x] Landmark Detection
   - [x] Binary Skin Mask
 - [x] Skin Mask Generation and Refinement
-  - [x] GMM Clustering
-  - [x] Guided Feathering
+  - [?] GMM Clustering
+  - [?] Guided Feathering
 - [x] Skin Imperfection Smoothing
   - [ ] Dynamic Smoothing Hyperparameter
 - [x] Skin Texture Restoration (DWT)

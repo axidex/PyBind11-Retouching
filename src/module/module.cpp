@@ -37,18 +37,17 @@ T random(T range_from, T range_to)
     return distr(generator);
 }
 
-cv::Mat GMM(const cv::Mat& src, const cv::Mat& orig)
+cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_face_not)
 {
     // Define 5 colors with a maximum classification of no more than 5
-
     int width = src.cols;
     int height = src.rows;
     int dims = src.channels();
 
     int nsamples = 1000;
-    cv::Mat points(nsamples, dims, CV_64FC1);
+    cv::Mat points = cv::Mat::zeros(nsamples, dims, CV_64FC1);
     cv::Mat labels;
-    cv::Mat result = cv::Mat::zeros(orig.size(), CV_64FC1);
+    cv::Mat result = cv::Mat::zeros(src.size(), CV_64FC1);
 
     // Define classification, that is, how many classification points of function K value
     int num_cluster = 3;
@@ -60,11 +59,13 @@ cv::Mat GMM(const cv::Mat& src, const cv::Mat& orig)
 
     while (points.at<double>(999, 0) == 0 && points.at<double>(999, 1) == 0 && points.at<double>(999, 2) == 0)
     {
-        int rand_width = random<int>(0, width);
-        int rand_height = random<int>(0, height);
-        int blue = src.at<cv::Vec3b>(rand_height, rand_width)[0];
-        int green = src.at<cv::Vec3b>(rand_height, rand_width)[1];
-        int red = src.at<cv::Vec3b>(rand_height, rand_width)[2];
+        int rand_width = random<int>(0, width-1);
+        int rand_height = random<int>(0, height-1);
+
+        int blue = final_face.at<cv::Vec3b>(rand_height, rand_width)[0];
+        int green = final_face.at<cv::Vec3b>(rand_height, rand_width)[1];
+        int red = final_face.at<cv::Vec3b>(rand_height, rand_width)[2];
+
         if (blue != 0 || green != 0 || red != 0)
         {
             points.at<double>(it, 0) = static_cast<double>(blue);
@@ -92,34 +93,27 @@ cv::Mat GMM(const cv::Mat& src, const cv::Mat& orig)
     cv::Mat weights = em_model->getWeights();
     cv::Mat means = em_model->getMeans();
     em_model->getCovs(cov);
-    width = orig.cols;
-    height = orig.rows;
-    dims = orig.channels();
     //std::cout << "mean:" << means.size << " weights:" << weights.size << " cov:" << cov.size() << " x " << cov[0].size << std::endl;
     int r = 0, g = 0, b = 0;
-
     std::vector<double> determinant_cov_mat_sqrt;
     std::vector<cv::Mat> inv_cov_mat;
-
+    
     for (int i = 0; i < cov.size(); ++i)
     {
         cv::Mat cov_mat = cov[i];
-        cv::Mat cov_mat_sqrt;
-        cv::pow(cov_mat, 0.5, cov_mat_sqrt);
         inv_cov_mat.emplace_back(cov_mat.inv());
-        determinant_cov_mat_sqrt.emplace_back(cv::determinant(cov_mat_sqrt));
+        determinant_cov_mat_sqrt.emplace_back(std::pow(cv::determinant(cov_mat), 0.5));
     }
-    double pi_dims = pow(2 * 3.1415926, dims);
+    double pi_dims = pow(2 * 3.1415926, dims/2);
     // Put each pixel in the sample
     for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {
             // Get the color of each channel
-            b = orig.at<cv::Vec3b>(row, col)[0];
-            g = orig.at<cv::Vec3b>(row, col)[1];
-            r = orig.at<cv::Vec3b>(row, col)[2];
+            b = final_face.at<cv::Vec3b>(row, col)[0];
+            g = final_face.at<cv::Vec3b>(row, col)[1];
+            r = final_face.at<cv::Vec3b>(row, col)[2];
             if (b == 0 && g == 0 && r == 0)
                 continue;
-
             // Put pixels in sample data
             sample.at<double>(0, 0) = static_cast<double>(b);
             sample.at<double>(0, 1) = static_cast<double>(g);
@@ -196,6 +190,13 @@ void FacePart(cv::Mat& mask_image, const dlib::shape_predictor landmark_detector
     cv::fillConvexPoly(mask_image, Pts, cv::Scalar(255), cv::LINE_AA);
 }
 
+bool areEqual(const cv::Mat& a, const cv::Mat& b)
+{
+    cv::Mat temp;
+    cv::bitwise_xor(a, b, temp);
+    return !(cv::countNonZero(temp.reshape(1)));
+}
+
 std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::string& model_dir)
 {
     const auto input_img = src;
@@ -269,24 +270,54 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         }
         // Guess a point located in the upper face region
         // Pb: 8 (bottom of jaw)
-        // Pt: 27 (top of nose
+        // Pt: 27 (top of nose)
         const auto& Pb = shape.part(8);
         const auto& Pt = shape.part(27);
         const auto x = Pb.x();
+        const auto x_nose = Pt.x();
+        std::cout << abs(x - x_nose) << std::endl;
         const auto y = Pt.y() - 0.85 * abs(Pb.y() - Pt.y());
         DrawLandmark(x, y, landmark_image);
         lower_face_points.push_back(cv::Point(x, y));
+        /* TODO solution for upper dot
+        cv::Point center(x, y);//Declaring the center point
+        int radius = 25; //Declaring the radius
+        cv::Scalar line_Color(173, 255, 47);//Color of the circle
+        int thickness = 2;//thickens of the line
+        cv::circle(work_image, center, radius, line_Color, thickness);
+        cv::imshow("mat", work_image);//Showing the circle//
+        cv::waitKey(0);//Waiting for Keystroke//
+        */
         // Fit ellipse
         const auto box = cv::fitEllipseDirect(lower_face_points);
         cv::Mat mask_tmp = cv::Mat(mask_image.size(), CV_8UC1, cv::Scalar(255));
         cv::ellipse(mask_tmp, box, cv::Scalar(0), /*thickness=*/-1, cv::FILLED);
-
 
         cv::bitwise_or(mask_tmp, mask_image, mask_image);
         cv::bitwise_not(mask_image, mask_image);
         face_masks.push_back(mask_image.clone());
     }
 
+    // TODO 
+    /*
+    cv::Mat zero_like = cv::Mat::zeros(face_masks[0].rows, face_masks[0].cols, CV_8UC1);
+    for (int face = 0; face < face_masks.size(); ++face)
+    {
+        for (int face2 = 0; face2 < face_masks.size(); ++face2)
+        {
+            if (face == face2)
+                continue;
+            cv::Mat face_and;
+            cv::bitwise_and(face_masks[face], face_masks[face2], face_and);
+            bool isEqual = areEqual(zero_like, face_and);
+            //bool isEqual = !cv::norm(zero_like, face_and, cv::NORM_L1);
+            if (!isEqual)
+                cv::bitwise_xor(face_masks[face], face_masks[face2], face_masks[face]);
+        }
+        cv::imshow("tmp", face_masks[face]);
+        cv::waitKey();
+    }
+    */
     std::vector<cv::Mat> final_face_vec, final_face_not_vec, mask_img_not_vec, input_img_vec, probability_mask_vec, final_mask_vec, final_mask_not_vec;
     input_img_vec.emplace_back(input_img.clone());
     for (int face = 0; face < face_masks.size(); ++face)
@@ -430,10 +461,6 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
         cv::Mat bgr_channels_mask[3];
         cv::split(original, bgr_channels_orig);
 
-        int width = bgr_channels_orig[0].rows;
-        int height = bgr_channels_orig[0].cols;
-
-
         smoothed_face = smoothed[face];
         cv::split(smoothed_face.clone(), bgr_channels_smoothed);
         probability_mask = probability_masks[face];
@@ -533,14 +560,14 @@ std::vector<std::vector<cv::Mat>> Restore(const cv::Mat& orig, const std::vector
     return restored_faces;
 }
 
-std::vector<cv::Mat> ProbMaskGenerate(const cv::Mat& orig, const std::vector<cv::Mat>& final_face)
+std::vector<cv::Mat> ProbMaskGenerate(const std::vector<cv::Mat>& final_face, const cv::Mat& orig, const std::vector<cv::Mat>& final_face_not)
 {
 
     std::vector<cv::Mat> gmm_masks;
 
     for (int face = 0; face < final_face.size(); ++face)
     {
-        gmm_masks.emplace_back(GMM(final_face[face], orig));
+        gmm_masks.emplace_back(GMM(final_face[face], orig, final_face_not));
     }
 
     /*for (int face = 0; face < probability_masks.size(); ++face)
@@ -568,25 +595,32 @@ std::vector<cv::Mat> ProbMaskGenerate(const cv::Mat& orig, const std::vector<cv:
 }
 
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
-
-
     //std::chrono::duration<double> elapsed_seconds = end - start;
     //std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
     auto start_MaskGenerate = std::chrono::steady_clock::now();
     std::vector < std::vector<cv::Mat> > masks_by_faces = MaskGenerate(src, model_dir);
+
     auto end_MaskGenerate = std::chrono::steady_clock::now();
     std::vector <cv::Mat> probability_masks = masks_by_faces[4];
-
     cv::Mat orig = masks_by_faces[3][0];
     auto start_ProbMaskGenerate = std::chrono::steady_clock::now();
     std::vector<cv::Mat> gmm_masks = ProbMaskGenerate(orig, masks_by_faces[0]);
     auto end_ProbMaskGenerate = std::chrono::steady_clock::now();
+
     auto start_Smoothing = std::chrono::steady_clock::now();
     std::vector <cv::Mat> smoothed = Smoothing(masks_by_faces);
     auto end_Smoothing = std::chrono::steady_clock::now();
+    /*for (int i = 0; i < smoothed.size(); ++i)
+    {
+        cv::imshow("smoothed" + std::to_string(i) , masks_by_faces[0][i]);
+    }
+    cv::waitKey();
+    cv::destroyAllWindows();
+    */
     auto start_CalculateCoef = std::chrono::steady_clock::now();
     std::vector<std::vector<double>> coefs = CalculateCoef(gmm_masks, orig, smoothed);
     auto end_CalculateCoef = std::chrono::steady_clock::now();
+
     auto start_Restore = std::chrono::steady_clock::now();
     std::vector<std::vector<cv::Mat>> faces(Restore(orig, smoothed, coefs));
     auto end_Restore = std::chrono::steady_clock::now();
