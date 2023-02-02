@@ -29,10 +29,8 @@
 //#include <typeinfo>
 
 template<typename T>
-T random(T range_from, T range_to)
+T random(T range_from, T range_to, std::mt19937 generator)
 {
-    std::random_device                  rand_dev;
-    std::mt19937                        generator(rand_dev());
     std::uniform_int_distribution<T>    distr(range_from, range_to);
     return distr(generator);
 }
@@ -56,11 +54,12 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
     int index = 0;
 
     int it = 0;
-
+    std::random_device rand_dev;
+    std::mt19937 generator(rand_dev());
     while (points.at<double>(999, 0) == 0 && points.at<double>(999, 1) == 0 && points.at<double>(999, 2) == 0)
     {
-        int rand_width = random<int>(0, width-1);
-        int rand_height = random<int>(0, height-1);
+        int rand_width = random<int>(0, width-1, generator);
+        int rand_height = random<int>(0, height-1, generator);
 
         int blue = final_face.at<cv::Vec3b>(rand_height, rand_width)[0];
         int green = final_face.at<cv::Vec3b>(rand_height, rand_width)[1];
@@ -77,8 +76,8 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
 
     while (points.at<double>(1999, 0) == 0 && points.at<double>(1999, 1) == 0 && points.at<double>(1999, 2) == 0)
     {
-        int rand_width = random<int>(0, width - 1);
-        int rand_height = random<int>(0, height - 1);
+        int rand_width = random<int>(0, width - 1, generator);
+        int rand_height = random<int>(0, height - 1, generator);
 
         int blue = final_face_not.at<cv::Vec3b>(rand_height, rand_width)[0];
         int green = final_face_not.at<cv::Vec3b>(rand_height, rand_width)[1];
