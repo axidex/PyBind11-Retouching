@@ -364,6 +364,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         cv::merge(mask_channels, 3, mask_img_3_channels);
         cv::Mat spot_image_temp;
         cv::Mat mask_img_not, mask_GF;
+
         // Guided Filter
         cv::bitwise_and(input_img, mask_img_3_channels, spot_image_temp);
         cv::ximgproc::guidedFilter(spot_image_temp, mask_img_3_channels, mask_GF, 10, 200); //10 200
@@ -372,7 +373,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
 
         // Inner mask
         cv::Mat mask_morphology_Ex;
-        cv::Mat maskElement = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(30, 30)); //71 71
+        cv::Mat maskElement = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(30, 30)); //71 71 30 30
 
         cv::morphologyEx(face_masks[face], mask_morphology_Ex, cv::MORPH_ERODE, maskElement);
         cv::Mat mask_morphology_Exs[3] = { mask_morphology_Ex, mask_morphology_Ex, mask_morphology_Ex };
@@ -403,7 +404,91 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         cv::Mat not_DoG_images[3] = { not_DoG_image, not_DoG_image, not_DoG_image };
         cv::Mat not_DoG_image_3_channels;
         cv::merge(not_DoG_images, 3, not_DoG_image_3_channels);
-
+        // // TODO CANNY EDGE DETECTION
+        //// Applying mask on DoG image
+        //cv::bitwise_and(face_masks[face], DoG_image, DoG_image);
+        //
+        //// Discard uniform skin regions
+        //cv::Mat threshImg;
+        //const int sizeAT = 2 * (std::min(DoG_image.cols, DoG_image.rows) / 50) + 1;
+        //cv::adaptiveThreshold(DoG_image, threshImg, /*maxValue=*/255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+        //    cv::THRESH_BINARY, /*blockSize=*/sizeAT, 0);
+//
+        //// Eroding
+        //cv::Mat elErode = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
+        //cv::morphologyEx(threshImg, threshImg, cv::MORPH_ERODE, elErode);
+//
+        //// Apply Canny Edge Detection
+        //cv::GaussianBlur(threshImg, threshImg, cv::Size(0, 0), /*sigma=*/3);
+        //cv::Mat edgeImg;
+        //cv::Canny(threshImg, edgeImg, /*threshold1=*/0, /*threshold2=*/10000, /*apertureSize=*/7,
+        //    /*L2gradient=*/false);
+//
+        //// Dilate detected edges so the extreme outer contours can cover those blemishes
+        //cv::Mat elDilate = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(11, 11));
+        //cv::morphologyEx(edgeImg, edgeImg, cv::MORPH_DILATE, elDilate);
+//
+        //// Find contours from those detected edges
+        //std::vector<cv::Vec4i> hierarchy;
+        //std::vector<std::vector<cv::Point>> contours;
+        //cv::findContours(edgeImg.clone(), contours, hierarchy, cv::RETR_EXTERNAL,
+        //    cv::CHAIN_APPROX_SIMPLE);
+//
+        //// Perform a depth-first traversal to find blemish boundaries
+        //constexpr auto ignoreThreshold = 30;
+        //constexpr auto traversalDepth = 10 * ignoreThreshold;
+       //
+        //auto preprocssedImg = work_image.clone();
+//
+        //for (const auto& contour : contours) {
+        //    const auto perimeter = cv::arcLength(contour, /*closed=*/true);
+        //    if (!(perimeter < traversalDepth && perimeter > ignoreThreshold))
+        //        continue;
+        //    float b = 0.0, g = 0.0, r = 0.0;
+        //    for (const auto& pt : contour) {
+        //        const auto& bgr = work_image.at<cv::Vec3b>(pt);
+        //        b += bgr[0], g += bgr[1], r += bgr[2];
+        //    }
+        //    const auto len = contour.size();
+        //    b /= len, g /= len, r /= len;
+        //    auto color = cv::Scalar(static_cast<int>(b), static_cast<int>(g), static_cast<int>(r));
+        //    cv::fillPoly(preprocssedImg, contour, color);
+        //}
+        //// Undo blemish concealment in the preserved facial zone
+        //cv::bitwise_and(preprocssedImg, mask_morphology_Ex_3_channels, preprocssedImg);
+        //cv::add(preprocssedImg, preserved_image, preprocssedImg);
+//
+        //// Fit image to the screen and show image
+        //std::string imageWin = "input";
+        //std::string cannyWin = "canny";
+        //std::string processedWin = "processed";
+        //cv::namedWindow(imageWin, cv::WINDOW_NORMAL);
+        //cv::setWindowProperty(imageWin, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+        //const auto [x, y, resW, resH] = cv::getWindowImageRect(imageWin);
+        //const auto [imgW, imgH] = work_image.size();
+        //const auto scaleFactor = 30;
+        //const auto scaledW = scaleFactor * resW / 100;
+        //const auto scaledH = scaleFactor * imgH * resW / (imgW * 100);
+        //cv::resizeWindow(imageWin, scaledW, scaledH);
+        //cv::imshow(imageWin, work_image);
+//
+        //// Show Canny edge detection result
+        //cv::namedWindow(cannyWin, cv::WINDOW_NORMAL);
+        //cv::setWindowProperty(cannyWin, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+        //cv::resizeWindow(cannyWin, scaledW, scaledH);
+        //cv::moveWindow(cannyWin, scaledW, 0);
+        //cv::imshow(cannyWin, edgeImg);
+//
+        //// Show preprocessed image
+        //cv::namedWindow(processedWin, cv::WINDOW_NORMAL);
+        //cv::setWindowProperty(processedWin, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+        //cv::resizeWindow(processedWin, scaledW, scaledH);
+        //cv::moveWindow(processedWin, 2 * scaledW, 0);
+        //cv::imshow(processedWin, preprocssedImg);
+//
+        //cv::waitKey();
+        //cv::destroyAllWindows();
+        
         // Creating final mask
         cv::Mat final_mask, final_mask_not;
 
