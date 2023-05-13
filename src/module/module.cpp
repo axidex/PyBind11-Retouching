@@ -58,8 +58,10 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
     std::mt19937 generator(rand_dev());
     while (points.at<double>(999, 0) == 0 && points.at<double>(999, 1) == 0 && points.at<double>(999, 2) == 0)
     {
-        int rand_width = random<int>(0, width-1, generator);
-        int rand_height = random<int>(0, height-1, generator);
+        //int rand_width = random<int>(0, width-1, generator);
+        //int rand_height = random<int>(0, height-1, generator);
+        int rand_width = std::rand() % width-1;
+        int rand_height = std::rand() % height-1;
 
         int blue = final_face.at<cv::Vec3b>(rand_height, rand_width)[0];
         int green = final_face.at<cv::Vec3b>(rand_height, rand_width)[1];
@@ -73,11 +75,13 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
             it++;
         }
     }
-
+//im = smoothingmodule.RetouchingImg("Orig1.png","shape_predictor_68_face_landmarks.dat")
     while (points.at<double>(1999, 0) == 0 && points.at<double>(1999, 1) == 0 && points.at<double>(1999, 2) == 0)
     {
-        int rand_width = random<int>(0, width - 1, generator);
-        int rand_height = random<int>(0, height - 1, generator);
+        //int rand_width = random<int>(0, width-1, generator);
+        //int rand_height = random<int>(0, height-1, generator);
+        int rand_width = std::rand() % width-1;
+        int rand_height = std::rand() % height-1;
 
         int blue = final_face_not.at<cv::Vec3b>(rand_height, rand_width)[0];
         int green = final_face_not.at<cv::Vec3b>(rand_height, rand_width)[1];
@@ -90,7 +94,10 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
             points.at<double>(it, 2) = static_cast<double>(red);
             it++;
         }
+        // need to solve here it's not a solution
+        //std::cout << blue << " " << green << " " << red << std::endl;
     }
+
     // EM Cluster Train
     cv::Ptr<cv::ml::EM> em_model = cv::ml::EM::create();
     // Partition number
@@ -110,11 +117,11 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
     cv::Mat weights = em_model->getWeights();
     cv::Mat means = em_model->getMeans();
     em_model->getCovs(cov);
-    std::cout << "mean:" << means.size << " weights:" << weights.size << " cov:" << cov.size() << " x " << cov[0].size << std::endl;
+    //std::cout << "mean:" << means.size << " weights:" << weights.size << " cov:" << cov.size() << " x " << cov[0].size << std::endl;
     int r = 0, g = 0, b = 0;
     std::vector<double> determinant_cov_mat_sqrt;
     std::vector<cv::Mat> inv_cov_mat;
-    
+
     for (int i = 0; i < cov.size(); ++i)
     {
         cv::Mat cov_mat = cov[i];
@@ -122,6 +129,7 @@ cv::Mat GMM(const cv::Mat& final_face, const cv::Mat& src, const cv::Mat& final_
         determinant_cov_mat_sqrt.emplace_back(std::pow(cv::determinant(cov_mat), 0.5));
     }
     double pi_dims = pow(2 * 3.1415926, dims/2);
+
     // Put each pixel in the sample
     for (int row = 0; row < height; row++) {
         for (int col = 0; col < width; col++) {
@@ -299,7 +307,7 @@ std::vector <std::vector<cv::Mat>> MaskGenerate(const cv::Mat& src, const std::s
         const auto& Pt = shape.part(27);
         const auto x = Pb.x();
         const auto x_nose = Pt.x();
-        std::cout << abs(x - x_nose) << std::endl;
+        //std::cout << abs(x - x_nose) << std::endl;
         const auto y = Pt.y() - 0.85 * abs(Pb.y() - Pt.y());
         DrawLandmark(x, y, landmark_image);
         lower_face_points.push_back(cv::Point(x, y));
@@ -602,7 +610,7 @@ std::vector < std::vector<double >> CalculateCoef(const std::vector<cv::Mat>& pr
             double coef = cv::sum(product_probs_intensity)[0];
 
             coef = ((gamma * coef) / (255)) + beta;
-            std::cout << coef << std::endl;
+            //std::cout << coef << std::endl;
             coefs.emplace_back(coef);
         }
         faces_coefs.emplace_back(coefs);
@@ -719,25 +727,28 @@ std::vector<cv::Mat> ProbMaskGenerate(const std::vector<cv::Mat>& final_face, co
 cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     //std::chrono::duration<double> elapsed_seconds = end - start;
     //std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
-    auto start_MaskGenerate = std::chrono::steady_clock::now();
+    //auto start_MaskGenerate = std::chrono::steady_clock::now();
+    std::cout << "Generating mask" << std::endl;
     std::vector < std::vector<cv::Mat> > masks_by_faces = MaskGenerate(src, model_dir);
-    auto end_MaskGenerate = std::chrono::steady_clock::now();
-    for (auto face : masks_by_faces[7])
-    {
-        cv::imshow("mat", face);
-        cv::waitKey();
-        cv::destroyAllWindows();
-    }
+    //auto end_MaskGenerate = std::chrono::steady_clock::now();
+    //for (auto face : masks_by_faces[7])
+    //{
+    //    cv::imshow("mat", face);
+    //    cv::waitKey();
+    //    cv::destroyAllWindows();
+    //}
 
     std::vector <cv::Mat> probability_masks = masks_by_faces[4];
     cv::Mat orig = masks_by_faces[3][0];
-    auto start_ProbMaskGenerate = std::chrono::steady_clock::now();
+    //auto start_ProbMaskGenerate = std::chrono::steady_clock::now();
+    std::cout << "Prob mask" << std::endl;
     std::vector<cv::Mat> gmm_masks = ProbMaskGenerate(masks_by_faces[0], orig, masks_by_faces[1]);
-    auto end_ProbMaskGenerate = std::chrono::steady_clock::now();
+    //auto end_ProbMaskGenerate = std::chrono::steady_clock::now();
 
-    auto start_Smoothing = std::chrono::steady_clock::now();
+    //auto start_Smoothing = std::chrono::steady_clock::now();
+    std::cout << "Smoothing mask" << std::endl;
     std::vector <cv::Mat> smoothed = Smoothing(masks_by_faces);
-    auto end_Smoothing = std::chrono::steady_clock::now();
+    //auto end_Smoothing = std::chrono::steady_clock::now();
     /*for (int i = 0; i < smoothed.size(); ++i)
     {
         cv::imshow("smoothed" + std::to_string(i) , masks_by_faces[0][i]);
@@ -745,25 +756,28 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     cv::waitKey();
     cv::destroyAllWindows();
     */
-    auto start_CalculateCoef = std::chrono::steady_clock::now();
+    //auto start_CalculateCoef = std::chrono::steady_clock::now();
+    std::cout << "Coeffs mask" << std::endl;
     std::vector<std::vector<double>> coefs = CalculateCoef(gmm_masks, orig, smoothed);
-    auto end_CalculateCoef = std::chrono::steady_clock::now();
+    //auto end_CalculateCoef = std::chrono::steady_clock::now();
 
-    auto start_Restore = std::chrono::steady_clock::now();
+    //auto start_Restore = std::chrono::steady_clock::now();
+    std::cout << "Restore mask" << std::endl;
     std::vector<std::vector<cv::Mat>> faces(Restore(orig, smoothed, coefs));
-    auto end_Restore = std::chrono::steady_clock::now();
+    //auto end_Restore = std::chrono::steady_clock::now();
     std::vector<cv::Mat> restored_faces, restored_faces_by_mask;
-    std::chrono::duration<double> elapsed_seconds = end_MaskGenerate - start_MaskGenerate;
-    std::cout << "elapsed time MaskGenerate: " << elapsed_seconds.count() << "s\n";
-    elapsed_seconds = end_ProbMaskGenerate - start_ProbMaskGenerate;
-    std::cout << "elapsed time ProbMaskGenerate: " << elapsed_seconds.count() << "s\n";
-    elapsed_seconds = end_Smoothing - start_Smoothing;
-    std::cout << "elapsed time Smoothing: " << elapsed_seconds.count() << "s\n";
-    elapsed_seconds = end_CalculateCoef - start_CalculateCoef;
-    std::cout << "elapsed time CalculateCoef: " << elapsed_seconds.count() << "s\n";
-    elapsed_seconds = end_Restore - start_Restore;
-    std::cout << "elapsed time Restore: " << elapsed_seconds.count() << "s\n";
-    auto start_PostProcessing = std::chrono::steady_clock::now();
+    //std::chrono::duration<double> elapsed_seconds = end_MaskGenerate - start_MaskGenerate;
+    //std::cout << "elapsed time MaskGenerate: " << elapsed_seconds.count() << "s\n";
+    //elapsed_seconds = end_ProbMaskGenerate - start_ProbMaskGenerate;
+    //std::cout << "elapsed time ProbMaskGenerate: " << elapsed_seconds.count() << "s\n";
+    //elapsed_seconds = end_Smoothing - start_Smoothing;
+    //std::cout << "elapsed time Smoothing: " << elapsed_seconds.count() << "s\n";
+    //elapsed_seconds = end_CalculateCoef - start_CalculateCoef;
+    //std::cout << "elapsed time CalculateCoef: " << elapsed_seconds.count() << "s\n";
+    //elapsed_seconds = end_Restore - start_Restore;
+    //std::cout << "elapsed time Restore: " << elapsed_seconds.count() << "s\n";
+    //auto start_PostProcessing = std::chrono::steady_clock::now();
+    std::cout << "Post process" << std::endl;
     for (auto face : faces)
     {
         cv::Mat final_clrs;
@@ -787,9 +801,9 @@ cv::Mat Retouching(const cv::Mat& src, const std::string& model_dir) {
     {
         cv::add(not_face, face, not_face);
     }
-    auto end_PostProcessing = std::chrono::steady_clock::now();
-    elapsed_seconds = end_PostProcessing - start_PostProcessing;
-    std::cout << "elapsed time PostProcessing: " << elapsed_seconds.count() << "s\n";
+    //auto end_PostProcessing = std::chrono::steady_clock::now();
+    //elapsed_seconds = end_PostProcessing - start_PostProcessing;
+    //std::cout << "elapsed time PostProcessing: " << elapsed_seconds.count() << "s\n";
     return not_face;
 }
 
@@ -825,3 +839,4 @@ PYBIND11_MODULE(smoothingmodule, module)
         , py::arg("image_dir"), py::arg("model_dir"));
     module.def("Show", &Show, "imshow", py::arg("mat"));
 }
+
