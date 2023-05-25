@@ -28,7 +28,7 @@ cmake ..
 ```
 
 ```
-sudo docker build -t retouching-module \
+sudo docker build -t retouching-module
 sudo docker run -it retouching-module 
 ```
 
