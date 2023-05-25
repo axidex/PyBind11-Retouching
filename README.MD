@@ -27,6 +27,11 @@ cd build
 cmake ..
 ```
 
+```
+sudo docker build -t retouching-module \
+sudo docker run -it retouching-module 
+```
+
 # After Compiling
 
 (Only Windows issue for me, on Linux it works perfectly without this step)
